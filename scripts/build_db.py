@@ -8,9 +8,9 @@ Python stdlib only. Steps:
   4. Gzip to reference.vN.db.gz. Print sizes + per-category hit-rate.
 
 Usage:
-  python3 tools/build_db.py            # full build
-  python3 tools/build_db.py --limit 5  # only 5 images per category (sanity check)
-  python3 tools/build_db.py --no-images
+  python3 scripts/build_db.py            # full build
+  python3 scripts/build_db.py --limit 5  # only 5 images per category (sanity check)
+  python3 scripts/build_db.py --no-images
 """
 import gzip
 import hashlib
@@ -261,6 +261,7 @@ def wiki_allimages(title):
 # ---------------------------------------------------------------- build
 
 def main():
+    global OUT_DB, OUT_GZ
     args = sys.argv[1:]
     limit = None
     no_images = "--no-images" in args
@@ -270,6 +271,11 @@ def main():
             limit = int(args[i + 1])
         if a == "--thumb":
             thumb = int(args[i + 1])
+        if a == "--out-dir":
+            OUT_DB = os.path.join(args[i + 1], "reference.db")
+            OUT_GZ = os.path.join(args[i + 1], "reference.v1.db.gz")
+    if OUT_DB and OUT_GZ:
+        os.makedirs(os.path.dirname(OUT_DB), exist_ok=True)
 
     print(f"[1/4] parsing {os.path.basename(XLSX)} ...")
     z, sheets = load_workbook()

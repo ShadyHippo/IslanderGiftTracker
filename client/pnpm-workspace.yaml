@@ -1,0 +1,22 @@
+packages:
+  - .
+
+# Security guardrails (see plan.md research notes):
+# - allowBuilds: lifecycle scripts run ONLY for packages listed here.
+# - trustPolicy no-downgrade: block versions published with weaker auth than previous.
+# - minimumReleaseAge: never install a package version published within the last day
+#   (most malware is caught and removed in that window).
+allowBuilds:
+  esbuild: true
+saveExact: true
+# typescript pinned to 5.x: svelte-check 4.7.5 crashes on TS 7 (native-Go compiler, API changed).
+# Not pinned via `pnpm add -D typescript@5` (a range ignores saveExact) — use exact pins in package.json.
+trustPolicy: no-downgrade
+# Manually verified exception (2026-08-13):
+#   chokidar@4.0.3 — flagged for missing provenance vs earlier versions, but:
+#   published 2024-12-18 by paulmillr (real maintainer), tag v4.0.3 exists on GitHub,
+#   NO lifecycle scripts, single legit dep (readdirp), in millions of projects for
+#   20 months with zero advisories. Laptop publish = weaker trust evidence, not an incident.
+trustPolicyExclude:
+  - chokidar
+minimumReleaseAge: 1440

@@ -1,0 +1,31 @@
+# Local full-stack app for development/testing. Everything in containers;
+# nothing new runs on the host (node lives inside the client build only).
+#
+#   make dev-ref          # (once) build a small reference db into dev-data/ref
+#   make app-up           # start the app: http://localhost:8080
+#   make app-logs         # follow logs
+#   make app-down         # stop
+#
+# Test login (first boot only): wife / devpass  (ACNH_INIT_USERS below)
+
+services:
+  acnh:
+    build:
+      context: ./server
+      dockerfile: deploy/Dockerfile
+    container_name: acnh-dev
+    restart: unless-stopped
+    # Run as the host user (uid 1000) so ./dev-data is writable. Dev-only file.
+    user: "1000:1000"
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      PORT: "8080"
+      DATA_DIR: /data
+      STATIC_DIR: /client-dist
+      ACNH_INIT_USERS: "wife:devpass,hippo:devpass"
+    volumes:
+      # user data + progress db (persists across app-up/down)
+      - ./dev-data:/data
+      # built client (make client-build); read-only, hot-swappable
+      - ./client/dist:/client-dist:ro

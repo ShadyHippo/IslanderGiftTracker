@@ -19,7 +19,7 @@ PWA for iPhone to track Animal Crossing: New Horizons gift data: lookup what vil
 
 ## Conventions
 
-- Python 3.12 stdlib only for tooling (`tools/build_db.py` must not need pip packages — the machine has none installed).
+- Python 3.12 stdlib only for tooling (`scripts/build_db.py` must not need pip packages — the machine has none installed).
 - xlsx parsing = `zipfile` + `xml.etree.ElementTree` (xlsx is a zip of XML; sheet names in `xl/workbook.xml`, strings in `xl/sharedStrings.xml`, cells `<c t="s"><v>idx</v></c>`).
 - Empty cells can be absent `<c/>` or `<v/>` with `None` text — handle both.
 - Agent must be able to run the build and rebuild dbs when the spreadsheet updates; version numbers bump in the manifest.
@@ -58,11 +58,41 @@ agent.md                   # this file
 Makefile
 res/                       # source data (inputs only)
   Data Spreadsheet for Animal Crossing New Horizons.xlsx
-tools/build_db.py          # xlsx -> reference.db -> reference.v{N}.db.gz
+scripts/build_db.py          # xlsx -> reference.db -> reference.v{N}.db.gz
+scripts/smoke.sh              # curl E2E
 server/                    # Go: auth, db endpoints, static serving, deploy/
 client/                    # (next) Svelte 5 + TS + Vite + Tailwind v4 + sql.js
 ```
 
+## Tools & when to use them
+
+All via `make` (root Makefile) + `go test`. **Node/pnpm only ever run inside containers** (`make client-*`) — never on the host; that's a hard constraint from the user (npm supply-chain risk).
+
+| Command | What it does | Use when |
+|---|---|---|
+| `make server-run` | `go run ./server` natively on :8080 | Fast server iteration; serves `client/dist` if built |
+| `make client-build` | containerized `vite build` → `client/dist` | After client edits (TS/Svelte compile check) |
+| `make client-check` | containerized `svelte-check` | Type-check Svelte/TS (0 errors expected) |
+| `make client-dev` | containerized vite dev server :5173, hot reload, proxies `/api`+`/db` to Go :8080 | UI development loop |
+| `make app-up` / `app-down` / `app-logs` | full app in docker (`docker-compose.dev.yml`) → localhost:8080 | Whole-stack verification; test login `wife`/`devpass` |
+| `make dev-ref` | builds small dev reference db → `dev-data/ref/` (3.6 MB gz) | After db-build script changes; the real 750 MB db is deploy-only |
+| `make build-db` | full reference db build (xlsx + dodo.ac images) → repo root | Only for producing the real deploy artifact |
+| `cd server && go test ./...` | Go unit + integration tests | After any server code change — must be green |
+| `make smoke` | curl E2E (13 checks: auth, upload validation, backups, manifest, 404s) | After server changes; fast, no deps |
+| `make e2e` | headless Chromium via playwright container; screenshot → `tests/e2e/smoke.png` | UI verification (the way to "see" the client); requires app running; first run pulls ~1.5 GB image |
+| `acnh-server -set-password <u> -password <p>` | admin password reset (server binary/container) | User forgot password; no self-service path |
+
+**Testing workflow:** server changes → `go test` + `make smoke`; client changes → `make client-build` (and `client-check`); whole app → `make app-up` then `make e2e` (+ manual browser).
+
+**Gotchas (cost real time, don't repeat):**
+- `docker-compose.dev.yml` runs the container as host uid (`user: "1000:1000"`) because `/data` is a host bind mount — without it, the container's uid 10001 can't write. Docker auto-creates missing bind dirs as **root** — pre-create them (`client-dirs`, `dev-ref` do this).
+- Dockerfile must use `golang:1.25-alpine` — go.mod requires go ≥ 1.25 (modernc.org/sqlite).
+- `build_db.py` has `--out-dir`, `--thumb N`, `--limit N`, `--no-images`; `--thumb 128` + `--limit 5` is the dev-size db.
+- Makefile client targets: `$$PWD`/`$$(id -u)` are shell-expanded on purpose; `$(...)` single-dollar gets eaten by make.
+- pnpm: exact pins live in `client/package.json` + `pnpm-lock.yaml` (commit both); installs are `--frozen-lockfile`; `chokidar@4.0.3` is a documented trust-policy exception; TypeScript must stay 5.x (svelte-check crashes on TS 7).
+
 ## Status
 
-Reference db built (master 807 MB, `--thumb` option available). Server complete & tested (2026-08-13): auth + rate limiting + `-set-password` admin flag, progress get/put with versioned backups + sqlite validation, reference manifest/download, SPA static serving, unit tests passing (`go test ./...`), Dockerfile/compose/SWAG conf. Next: PWA client.
+Reference db built (master 807 MB, `--thumb` option available). Server complete & tested (2026-08-13): auth + rate limiting + `-set-password` admin flag, progress get/put with versioned backups + sqlite validation, reference manifest/download, SPA static serving, unit tests passing (`go test ./...`), Dockerfile/compose/SWAG conf. Client scaffolded & building in containers (`make client-setup/build/check/dev` — node/pnpm never on the host): Svelte 5 + TS + Vite 8 + Tailwind v4 + sql.js, 8 deps exact-pinned, chokidar@4.0.3 trust-policy exception (vetted), TS 5.x (svelte-check vs TS 7). Server serves built client.
+
+Testing/launch tooling (2026-08-13): `make smoke` (curl E2E, 13 checks), `make app-up/app-down/app-logs` (full app in docker, `docker-compose.dev.yml`, test login wife/devpass), `make dev-ref` (small dev reference db), `make e2e` (headless Chromium via playwright container, screenshot to tests/e2e/). Next: PWA features (login, villager views, gift log, sync, service worker).

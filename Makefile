@@ -48,7 +48,7 @@ docker:
 
 # --- Local full-stack app (docker-compose.dev.yml) ---
 dev-ref:
-	mkdir -p dev-data/ref && python3 scripts/build_db.py --thumb 128 --limit 5 --out-dir dev-data/ref
+	mkdir -p dev-data/ref && python3 scripts/build_db.py --thumb 128 --categories villagers --out-dir dev-data/ref
 
 app-up:
 	docker compose -f docker-compose.dev.yml up -d --build
@@ -68,4 +68,4 @@ smoke:
 e2e:
 	docker run --rm --network host -u "$$(id -u):$$(id -g)" -e PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
 		-v "$$PWD/tests/e2e:/e2e" -w /e2e mcr.microsoft.com/playwright:v1.62.1-noble \
-		sh -c "npm install --no-fund --no-audit --ignore-scripts >/dev/null 2>&1 && node ui-smoke.js"
+		sh -c "[ -d node_modules ] || npm install --no-fund --no-audit --ignore-scripts >/dev/null 2>&1; node ui-smoke.js"

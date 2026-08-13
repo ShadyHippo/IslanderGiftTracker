@@ -78,6 +78,8 @@ func (s *server) handleManifest(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "scan failed"})
 		return
 	}
+	// Never cache: the client must always see fresh sha256 values.
+	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, map[string]any{"latest": latestVersion(entries), "references": entries})
 }
 
@@ -97,7 +99,11 @@ func (s *server) handleRefDownload(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such reference"})
 		return
 	}
-	http.ServeFile(w, r, abs) // Range support for resume of large downloads
+	// Same URL can carry new content (dev rebuilds; version bumps in prod are
+	// expected too). Force revalidation; http.ServeFile supplies Last-Modified
+	// + Range support for resume of large downloads.
+	w.Header().Set("Cache-Control", "no-cache")
+	http.ServeFile(w, r, abs)
 }
 
 func latestVersion(entries []refEntry) int {

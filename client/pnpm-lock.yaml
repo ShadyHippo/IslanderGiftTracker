@@ -11,6 +11,9 @@ importers:
       sql.js:
         specifier: 1.14.1
         version: 1.14.1
+      sv-router:
+        specifier: 0.18.1
+        version: 0.18.1(svelte@5.56.8)
       svelte:
         specifier: 5.56.8
         version: 5.56.8
@@ -536,6 +539,12 @@ packages:
   sql.js@1.14.1:
     resolution: {integrity: sha512-gcj8zBWU5cFsi9WUP+4bFNXAyF1iRpA3LLyS/DP5xlrNzGmPIizUeBggKa8DbDwdqaKwUcTEnChtd2grWo/x/A==}
 
+  sv-router@0.18.1:
+    resolution: {integrity: sha512-xMJxgDwmcWtLDopU6xdEiBICRN40ucTlK63GUZf6cQk8689LUaUD5FlMrdtTdPFRQ2kfJBeJgoaI1k+XOuIQSQ==}
+    hasBin: true
+    peerDependencies:
+      svelte: ^5
+
   svelte-check@4.7.5:
     resolution: {integrity: sha512-NnkHGCTPH6k4ka1E9IpTuNv40uLArHnX52kLEuaHSGqRlPYTnkbFs529jSWG+y+wDy+v+jA2PQ0soN1umVK+OA==}
     engines: {node: '>= 18.0.0'}
@@ -969,6 +978,11 @@ snapshots:
   source-map-js@1.2.1: {}
 
   sql.js@1.14.1: {}
+
+  sv-router@0.18.1(svelte@5.56.8):
+    dependencies:
+      esm-env: 1.2.2
+      svelte: 5.56.8
 
   svelte-check@4.7.5(picomatch@4.0.5)(svelte@5.56.8)(typescript@5.9.3):
     dependencies:

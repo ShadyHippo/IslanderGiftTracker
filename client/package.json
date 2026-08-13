@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "sql.js": "1.14.1",
+    "sv-router": "0.18.1",
     "svelte": "5.56.8"
   },
   "devDependencies": {

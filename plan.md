@@ -58,10 +58,78 @@ App-facing tables (what the client queries):
 
 Shipped as `reference.v1.db.gz`, target ≤3 MB download.
 
-### progress.db (writable, per user, IndexedDB + server)
+### progress.db — the user write db (spec, draft v1)
 
-- `gifts(id, villager, item, date, note, created_at)`
-- `meta(key, value)` — schema version, last_synced
+Everything the user writes lives in one per-user SQLite db (`progress.db`), kept as a
+byte blob in IndexedDB on the phone, loaded into sql.js, and mirrored to the server.
+
+**Principles**
+- Single writer (the phone), last-write-wins on whole-db upload. No merge, ever.
+- Local-first: the phone copy is the source of truth; the server is mirror + versioned
+  backup. Fresh install / cleared IndexedDB → download the server copy on first open.
+- Reference data is never copied here: `villagers.name` / item names are TEXT join keys
+  into `reference.db` (which is rebuilt and versioned; no FKs that would break).
+- Every write feature must be: (1) in the schema, (2) in the client's `ensureSchema`
+  (idempotent migrations), (3) survive upload (server checks are generic).
+
+**Feature inventory (what the user can write)**
+| Feature | Table | Status |
+|---|---|---|
+| Favorite villagers | `villager_state` | **locked** (user requested; not yet built) |
+| On-island villagers | `villager_state` | **locked** (user requested) |
+| Gift given, per villager (item + date + note) | `gifts` | **locked** (plan; works for any villager, favorite or not) |
+| Free-text notes per villager ("moved in", "waiting for her photo") | `villager_state.notes` | proposed — cheap, high value |
+| Gift wishlist ("want to give later") paired with the matcher | `wishlist` | proposed — natural matcher output; skip if out of scope |
+
+Explicitly **not** here: item catalog checklists ("which items I own"), villager
+photos/birthday reminders (read-only views over `reference.db`), multi-device sync.
+
+**Schema (draft v2, `meta.schema_version = 2`)**
+```sql
+CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);
+-- keys: schema_version, owner (username), last_synced (ISO8601)
+
+CREATE TABLE villager_state (
+  villager   TEXT PRIMARY KEY,            -- reference.db villagers.name
+  favorite   INTEGER NOT NULL DEFAULT 0,
+  on_island  INTEGER NOT NULL DEFAULT 0,
+  notes      TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL                -- ISO8601 UTC
+);
+
+CREATE TABLE gifts (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  villager   TEXT NOT NULL,               -- villagers.name (no FK, by design)
+  item       TEXT NOT NULL,               -- name snapshot as given/picked; survives
+                                          -- reference rebuilds; free text OK
+  date       TEXT NOT NULL,               -- YYYY-MM-DD (day the gift was given)
+  note       TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX idx_gifts_villager ON gifts(villager);
+```
+
+**Open questions (awaiting user)** — mark these in the next planning pass:
+1. Wishlist table in or out?
+2. `villager_state.notes` in or out?
+3. One row per gift (item), or allow bundles ("gave 3 things on 1 day")?
+
+**Client lifecycle**
+- Load: IndexedDB blob → sql.js → `ensureSchema(db)` (runs CREATE TABLE IF NOT EXISTS +
+  meta bumps; additive only, never destructive).
+- Read/write: sql.js in memory; every write sets `dirty`.
+- Save: `db.export()` → blob → IndexedDB (cheap, do on every write).
+- Sync: auto on app open + manual button. If server copy exists and local is empty
+  (fresh install) → download instead. Otherwise upload; server stores a timestamped
+  backup before replacing (already implemented, 20 kept).
+
+**Server facts that constrain the spec**
+- `GET/PUT /api/progress`, per-user file, 64 MB upload cap, validation = sqlite magic +
+  `PRAGMA quick_check` only — **schema-agnostic**, so any table set above is accepted
+  unchanged. No server code change needed for the new tables.
+- Server's own empty-seed template is still `gifts`+`meta` v1; irrelevant because the
+  client runs `ensureSchema` on anything it downloads.
 
 ### Server storage
 

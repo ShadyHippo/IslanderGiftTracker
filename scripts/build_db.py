@@ -10,6 +10,7 @@ Python stdlib only. Steps:
 Usage:
   python3 scripts/build_db.py            # full build
   python3 scripts/build_db.py --limit 5  # only 5 images per category (sanity check)
+  python3 scripts/build_db.py --categories villagers   # only listed categories, no limit
   python3 scripts/build_db.py --no-images
 """
 import gzip
@@ -265,12 +266,15 @@ def main():
     args = sys.argv[1:]
     limit = None
     no_images = "--no-images" in args
+    categories = None
     thumb = 0
     for i, a in enumerate(args):
         if a == "--limit":
             limit = int(args[i + 1])
         if a == "--thumb":
             thumb = int(args[i + 1])
+        if a == "--categories":
+            categories = set(c.strip() for c in args[i + 1].split(",") if c.strip())
         if a == "--out-dir":
             OUT_DB = os.path.join(args[i + 1], "reference.db")
             OUT_GZ = os.path.join(args[i + 1], "reference.v1.db.gz")
@@ -354,6 +358,9 @@ def main():
                     continue
                 seen.add(key)
                 tasks.append((sheet_name, row[name_col], var))
+        if categories:
+            wanted = {c.lower() for c in categories}
+            tasks = [t for t in tasks if t[0].lower() in wanted]
         print(f"    {len(tasks)} (name, variation) pairs to fetch")
         if limit:
             seen_cat = {}

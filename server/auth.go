@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"strings"
@@ -19,7 +21,22 @@ const (
 	sessionCookie = "acnh_session"
 	sessionTTL    = 30 * 24 * time.Hour
 	bcryptCost    = 10
+	// maxPasswordLen caps passwords at 64 bytes: bcrypt silently truncates
+	// input at 72 bytes, so longer passwords would be compared only by their
+	// first 72 bytes. Reject them up front instead of storing a footgun.
+	maxPasswordLen = 64
 )
+
+// dummyHash is a bcrypt hash used only to equalize response timing when a
+// username doesn't exist, so login latency can't reveal which usernames are
+// valid (user enumeration). It is never used to verify anyone.
+var dummyHash = func() []byte {
+	h, err := bcrypt.GenerateFromPassword([]byte("acnh-timing-equalizer"), bcryptCost)
+	if err != nil {
+		panic("acnh: generating dummy bcrypt hash: " + err.Error())
+	}
+	return h
+}()
 
 func initUsersSchema(db *sql.DB) error {
 	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS users (
@@ -32,6 +49,9 @@ func initUsersSchema(db *sql.DB) error {
 }
 
 func createUser(db *sql.DB, username, password string) error {
+	if err := validatePassword(password); err != nil {
+		return err
+	}
 	hash, err := bcryptHash(password)
 	if err != nil {
 		return err
@@ -44,6 +64,9 @@ func createUser(db *sql.DB, username, password string) error {
 // upsertUser sets a user's password, creating the user if they don't exist.
 // Used by the on-server admin flag -set-password.
 func upsertUser(db *sql.DB, username, password string) error {
+	if err := validatePassword(password); err != nil {
+		return err
+	}
 	hash, err := bcryptHash(password)
 	if err != nil {
 		return err
@@ -63,10 +86,23 @@ func bcryptHash(password string) (string, error) {
 	return string(h), err
 }
 
+func validatePassword(password string) error {
+	if password == "" {
+		return errors.New("password must not be empty")
+	}
+	if len(password) > maxPasswordLen {
+		return fmt.Errorf("password too long (max %d bytes)", maxPasswordLen)
+	}
+	return nil
+}
+
 func verifyUser(db *sql.DB, username, password string) (bool, error) {
 	var hash string
 	err := db.QueryRow("SELECT password_hash FROM users WHERE username = ?", username).Scan(&hash)
 	if errors.Is(err, sql.ErrNoRows) {
+		// Run a real bcrypt comparison against a dummy hash so response time
+		// is the same whether the username exists or not.
+		_ = bcrypt.CompareHashAndPassword(dummyHash, []byte(password))
 		return false, nil
 	}
 	if err != nil {
@@ -184,6 +220,10 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Username = strings.TrimSpace(req.Username)
+	if len(req.Password) > maxPasswordLen {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "password too long"})
+		return
+	}
 	ok, err := verifyUser(s.usersDB, req.Username, req.Password)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
@@ -201,6 +241,7 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.sessionCookie(w, tok)
+	log.Printf("login ok user=%q ip=%s", req.Username, ip)
 	writeJSON(w, http.StatusOK, map[string]string{"username": req.Username})
 }
 

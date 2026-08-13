@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 )
@@ -35,6 +36,45 @@ func TestUpsertUser(t *testing.T) {
 	}
 	if ok, _ := verifyUser(db, "wife", "first"); ok {
 		t.Fatal("old password should no longer verify")
+	}
+}
+
+func TestPasswordTooLong(t *testing.T) {
+	db := tempUsersDB(t)
+	long := strings.Repeat("x", 80)
+	if err := createUser(db, "wife", long); err == nil {
+		t.Fatal("createUser should reject >64-byte password")
+	}
+	if err := upsertUser(db, "wife", long); err == nil {
+		t.Fatal("upsertUser should reject >64-byte password")
+	}
+	if err := createUser(db, "wife", ""); err == nil {
+		t.Fatal("createUser should reject empty password")
+	}
+	// A 64-byte password is the limit and must still work.
+	exact := strings.Repeat("y", maxPasswordLen)
+	if err := createUser(db, "wife", exact); err != nil {
+		t.Fatalf("64-byte password should be accepted: %v", err)
+	}
+	if ok, err := verifyUser(db, "wife", exact); err != nil || !ok {
+		t.Fatalf("64-byte password should verify: ok=%v err=%v", ok, err)
+	}
+}
+
+func TestVerifyMissingUserIsMismatch(t *testing.T) {
+	db := tempUsersDB(t)
+	if err := createUser(db, "wife", "s3cret"); err != nil {
+		t.Fatal(err)
+	}
+	// Same result shape as a wrong password for an existing user:
+	// false, nil — never an error, never ok.
+	ok, err := verifyUser(db, "nobody", "s3cret")
+	if ok || err != nil {
+		t.Fatalf("missing user: ok=%v err=%v (want false, nil)", ok, err)
+	}
+	ok, err = verifyUser(db, "nobody", "")
+	if ok || err != nil {
+		t.Fatalf("missing user, empty pw: ok=%v err=%v (want false, nil)", ok, err)
 	}
 }
 

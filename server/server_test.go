@@ -113,6 +113,22 @@ func TestAuthFlow(t *testing.T) {
 	after.Body.Close()
 }
 
+func TestLoginPasswordTooLong(t *testing.T) {
+	ts := newTestServer(t, filepath.Join(t.TempDir(), "nonexistent"))
+	body := bytes.NewBufferString(`{"username":"wife","password":"` + strings.Repeat("x", 80) + `"}`)
+	req, _ := http.NewRequest("POST", ts.URL+"/api/login", body)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	io.Copy(io.Discard, resp.Body)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("over-long password: status = %d, want 400", resp.StatusCode)
+	}
+}
+
 func TestProgressFlow(t *testing.T) {
 	ts := newTestServer(t, filepath.Join(t.TempDir(), "nonexistent"))
 	_, cookies := login(t, ts, "wife", "s3cret")

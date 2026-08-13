@@ -1,0 +1,24 @@
+# --- Build artifacts (regenerate with `make build-db`) ---
+reference.db
+reference.v*.db.gz
+cache/
+images-missed.txt
+build.log
+
+# --- Server runtime data: secrets + user data, never commit ---
+server/data/
+server/bin/
+
+# --- Client build ---
+client/node_modules/
+client/dist/
+
+# --- Misc ---
+__pycache__/
+*.pyc
+.env
+.vite/
+
+# --- Agent tooling (machine-local, not project source) ---
+.maki/
+cont_maki.sh

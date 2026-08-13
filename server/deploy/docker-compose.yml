@@ -1,0 +1,24 @@
+services:
+  acnh:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: acnh
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080" # SWAG proxies to this; no public exposure
+    environment:
+      PORT: "8080"
+      DATA_DIR: /data
+      SECURE_COOKIES: "true"
+      # Comma-separated user:password, applied ONLY on first start (empty users table).
+      # Change passwords later by editing this file + `docker compose down && up -d` after deleting
+      # the volume, or run the server with a management flag once added.
+      ACNH_INIT_USERS: "wife:CHANGE_ME,hippo:CHANGE_ME"
+    volumes:
+      - acnh-data:/data
+      # Reference db releases: drop reference.vN.db.gz files here and they appear in the manifest.
+      - ./ref:/data/ref:ro
+
+volumes:
+  acnh-data:

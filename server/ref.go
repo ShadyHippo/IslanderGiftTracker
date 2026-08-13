@@ -1,0 +1,111 @@
+package main
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"regexp"
+	"sort"
+	"strconv"
+	"sync"
+)
+
+var refFileRe = regexp.MustCompile(`^reference\.v(\d+)\.db\.gz$`)
+
+type refEntry struct {
+	Version int    `json:"version"`
+	File    string `json:"file"`
+	Size    int64  `json:"size"`
+	SHA256  string `json:"sha256"`
+}
+
+// manifestCache memoizes hashes per (file, mtime, size) so we never re-hash the
+// ~750 MB reference file more than once per change.
+type manifestCache struct {
+	mu     sync.Mutex
+	key    string
+	hashes map[string]string // filename -> sha256
+}
+
+var mcache = &manifestCache{hashes: map[string]string{}}
+
+func (s *server) referenceEntries() ([]refEntry, error) {
+	matches, err := filepath.Glob(filepath.Join(s.refDir, "reference.*.db.gz"))
+	if err != nil {
+		return nil, err
+	}
+	var out []refEntry
+	for _, m := range matches {
+		name := filepath.Base(m)
+		mm := refFileRe.FindStringSubmatch(name)
+		if mm == nil {
+			continue
+		}
+		st, err := os.Stat(m)
+		if err != nil {
+			continue
+		}
+		version, _ := strconv.Atoi(mm[1])
+		out = append(out, refEntry{Version: version, File: name, Size: st.Size(), SHA256: s.fileHash(m, st)})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Version > out[j].Version })
+	return out, nil
+}
+
+func (s *server) fileHash(path string, st os.FileInfo) string {
+	key := path + "|" + st.ModTime().UTC().String() + "|" + strconv.FormatInt(st.Size(), 10)
+	mcache.mu.Lock()
+	defer mcache.mu.Unlock()
+	if mcache.key != key {
+		h := sha256.New()
+		if f, err := os.Open(path); err == nil {
+			if _, err := io.Copy(h, f); err == nil {
+				mcache.hashes = map[string]string{path: hex.EncodeToString(h.Sum(nil))}
+				mcache.key = key
+			}
+			f.Close()
+		}
+	}
+	return mcache.hashes[path]
+}
+
+func (s *server) handleManifest(w http.ResponseWriter, r *http.Request) {
+	entries, err := s.referenceEntries()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "scan failed"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"latest": latestVersion(entries), "references": entries})
+}
+
+func (s *server) handleRefDownload(w http.ResponseWriter, r *http.Request) {
+	filename := r.PathValue("filename")
+	if filename == "" || !refFileRe.MatchString(filename) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such reference"})
+		return
+	}
+	// Resolve strictly inside refDir.
+	abs := filepath.Join(s.refDir, filename)
+	if filepath.Dir(abs) != s.refDir {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such reference"})
+		return
+	}
+	if _, err := os.Stat(abs); err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such reference"})
+		return
+	}
+	http.ServeFile(w, r, abs) // Range support for resume of large downloads
+}
+
+func latestVersion(entries []refEntry) int {
+	latest := 0
+	for _, e := range entries {
+		if e.Version > latest {
+			latest = e.Version
+		}
+	}
+	return latest
+}

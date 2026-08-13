@@ -4,7 +4,7 @@ A mobile-first PWA for the wife's iPhone: log in on the home server, look up wha
 
 ## Source data
 
-- `Data Spreadsheet for Animal Crossing New Horizons.xlsx` (copy in this repo, from `~/Downloads`)
+- `res/Data Spreadsheet for Animal Crossing New Horizons.xlsx` (source spreadsheet, from `~/Downloads`; provenance + update steps in `README.md` → Source data)
 - 40 sheets, ~30k rows total. Category sheets: furniture (Housewares, Miscellaneous, Wall-mounted, Ceiling Decor, Interior Structures), surfaces (Wallpaper, Floors, Rugs), collectibles (Photos, Posters), clothing (Tops, Bottoms, Dress-Up, Headwear, Accessories, Socks, Shoes, Bags, Umbrellas, Clothing Other), Tools/Goods, Fencing, Music, critters (Insects, Fish, Sea Creatures), Fossils, Artwork, Gyroids, Other, Construction, Recipes, Achievements, Villagers, Special NPCs, Reactions, Message Cards, Seasons and Events, Paradise Planning.
 - **No images in the spreadsheet** — every Image column is empty; no `xl/media/` in the xlsx; the 40 `drawing*.xml` files are 775-byte placeholders. Only internal IDs in `Filename` columns (e.g. `brd09`, `squ05`).
 - Images are instead fetched at **build time** from **dodo.ac** (Nookipedia's public image CDN) — see the Images section below.

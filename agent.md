@@ -4,7 +4,7 @@ Read `plan.md` for the full plan, decisions log, and schemas. This file is the q
 
 ## Project
 
-PWA for iPhone to track Animal Crossing: New Horizons gift data: lookup what villagers like, log gifts given, sync per-user progress db to a home server. Source data: `Data Spreadsheet for Animal Crossing New Horizons.xlsx` (no images; text only).
+PWA for iPhone to track Animal Crossing: New Horizons gift data: lookup what villagers like, log gifts given, sync per-user progress db to a home server. Source data: `res/Data Spreadsheet for Animal Crossing New Horizons.xlsx` (no images; text only — images fetched from dodo.ac at build time).
 
 ## Locked stack
 
@@ -35,7 +35,7 @@ PWA for iPhone to track Animal Crossing: New Horizons gift data: lookup what vil
 - **No monkeycache** (dotnet JSON blob offline store) — replaced by the second sqlite db (progress.db).
 - **No real filesystem / File System Access API on iOS** — unsupported in Safari; IndexedDB instead. No export/import file buttons (user chose IndexedDB-only).
 - **No legacy browser support, no polyfills.**
-- **No images in v1** — replaced: images ARE in scope, fetched at build time from dodo.ac (see Images section in plan.md).
+- **No hotlinking at runtime for the reference db** — images ship in the db as BLOBs (master-first, user decision); see Images section below.
 - **No multi-device write merge** — phone is the only writer; don't add row-level sync complexity.
 - **No dotnet server** — Go.
 
@@ -49,15 +49,18 @@ PWA for iPhone to track Animal Crossing: New Horizons gift data: lookup what vil
 - In-db BLOBs for **everything** (master-first, user decision): single `images(category, name, data, url)` table. Measure size after build; pare only if actually needed.
 - Build script must print per-category hit-rate.
 
-## Repo layout (planned)
+## Repo layout
 
 ```
-plan.md
-agent.md
-Data Spreadsheet for Animal Crossing New Horizons.xlsx
+README.md                  # project overview + quickstart
+plan.md                    # full plan, schemas, decisions log
+agent.md                   # this file
+Makefile
+res/                       # source data (inputs only)
+  Data Spreadsheet for Animal Crossing New Horizons.xlsx
 tools/build_db.py          # xlsx -> reference.db -> reference.v{N}.db.gz
-server/                    # Go: auth, db endpoints, static serving, Dockerfile
-client/                    # Svelte 5 + TS + Vite + Tailwind v4 + sql.js
+server/                    # Go: auth, db endpoints, static serving, deploy/
+client/                    # (next) Svelte 5 + TS + Vite + Tailwind v4 + sql.js
 ```
 
 ## Status

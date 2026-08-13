@@ -53,6 +53,22 @@ try {
   await page.screenshot({ path: '/e2e/detail.png', fullPage: false });
   console.log('PASS: villager detail page renders at a deep-linkable URL');
 
+  // Gift ideas section renders with matched items
+  await page.waitForSelector('section:has-text("Gift ideas")', { timeout: 5000 });
+  const giftSection = await page.textContent('section:has-text("Gift ideas")');
+  const perfectMatches = (giftSection?.match(/Perfect match/g) || []).length;
+  const ideas = (giftSection?.match(/♥/g) || []).length;
+  console.log(`gift ideas: ${ideas} color matches, ${perfectMatches} perfect matches`);
+  if (!perfectMatches || !ideas) {
+    console.error('FAIL: gift ideas section empty or no matches');
+    process.exit(1);
+  }
+  console.log('PASS: gift ideas render with color/style matches');
+
+  // Their house strip renders
+  await page.waitForSelector('section:has-text("Their house")', { timeout: 5000 });
+  console.log('PASS: house items render');
+
   // Browser back button returns to the list
   await page.goBack();
   await page.waitForSelector('input[placeholder^="Search by name"]', { timeout: 5000 });

@@ -14,7 +14,7 @@ A mobile-first PWA for the wife's iPhone: log in on the home server, look up wha
 - There is **no per-villager list of specific items**. ACNH gift quality is rule-based: match the item's color/style against the villager's favorites.
 - The spreadsheet already contains the canonical data: **Style 1/2** (favorite clothing styles: Active/Cool/Cute/Elegant/Gorgeous/Simple) and **Color 1/2** (favorite colors), plus Favorite Song, Favorite Saying, birthday, hobby, personality.
 - This is the same model Nookipedia's API (`nh_details.fav_styles` / `fav_colors`), acnh.co, Nook Plaza, and `conniejkchan/acnh-villager-stylist` use. **No external API / key needed — fully offline.**
-- Gift matcher rule: item color/style overlaps villager Color 1/2 or Style 1/2 → good gift. *(Build-time check: whether clothing sheets carry a Style column; if absent, matcher is color-based — still the canonical heuristic.)*
+- **Gift matcher (built 2026-08-13, verified against the old Nookea site via Wayback)**: item color/style overlap vs villager favorites. Furniture = **color match only** (furniture has no styles in ACNH — gift quality is driven by favorite colors). Clothing = **style AND color** (style is primary; both = "perfect match"). Scoring: `(color match ? +1) + (style match ? +1)`, 2 = perfect. Nookea (nookea.com, now a dead/malware domain — archived pages at web.archive.org) generated exactly this kind of per-villager recommendation list; its Chow page recommended Black/White clothing (his favorite colors), confirming the color-driven approach. The `items` table stores clothing style from the sheets' `Style 1`/`Style 2` columns (merged), plus `label_themes` (mirrors Nookea's "Outdoorsy, Sporty" tags). Matcher = client-side sql.js query over the `items` table, no schema additions needed beyond the columns above.
 
 ## Architecture
 
@@ -210,8 +210,8 @@ https://dodo.ac/np/images/{md5(filename)[0]}/{md5(filename)[:2]}/{urlencoded-fil
 
 1. **DONE — Go server built & tested locally** (2026-08-13): `server/` with auth (bcrypt + in-memory sessions, `ACNH_INIT_USERS` bootstrap), `GET/PUT /api/progress` (sqlite magic + `PRAGMA quick_check` validation, timestamped backups, 20 kept, versions endpoint), `/db/manifest.json` (sha256-hashed, memoized) + ranged downloads, SPA static serving with fallback placeholder. `CGO_ENABLED=0 go build` clean; full curl E2E passed. Deploy: `server/deploy/` Dockerfile + compose + SWAG conf.
 
-2. **Client** — Svelte 5 + TS + Vite + Tailwind v4 + sql.js + pnpm (8 deps, scripts blocked except esbuild, 1-day cooldown, exact pins). PWA: login, villager list/detail, gift log, sync. Needs Node 24 + pnpm (corepack).
+2. **Client** — Svelte 5 + TS + Vite + Tailwind v4 + sql.js + pnpm (8 deps, scripts blocked except esbuild, 1-day cooldown, exact pins). PWA: login, villager list/detail, gift log, sync. Needs Node 24 + pnpm (corepack). **DONE (2026-08-13):** login, reference-db loader, villager list + search (icons), detail page with Likes + **Gift ideas** (color/style matcher, `client/src/lib/gifts.ts`) + "Their house" strip, deep links via sv-router 0.18.1.
 
-3. **Rebuild reference db** (`--thumb` option available) — deferred per user.
+3. **Rebuild reference db** (`--thumb` option available) — deferred per user. NOTE: the master db must be rebuilt before deploy — the items table now carries clothing styles (`Style 1/2` merged) and `label_themes`, which the old master build lacks.
 
 

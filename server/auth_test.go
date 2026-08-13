@@ -12,13 +12,13 @@ func TestCreateAndVerifyUser(t *testing.T) {
 	if err := createUser(db, "wife", "s3cret"); err != nil {
 		t.Fatalf("createUser: %v", err)
 	}
-	if ok, err := verifyUser(db, "wife", "s3cret"); err != nil || !ok {
+	if _, ok, err := verifyUser(db, "wife", "s3cret"); err != nil || !ok {
 		t.Fatalf("verify correct password: ok=%v err=%v", ok, err)
 	}
-	if ok, err := verifyUser(db, "wife", "wrong"); err != nil || ok {
+	if _, ok, err := verifyUser(db, "wife", "wrong"); err != nil || ok {
 		t.Fatalf("verify wrong password: ok=%v err=%v (want false, nil)", ok, err)
 	}
-	if ok, err := verifyUser(db, "nobody", "s3cret"); err != nil || ok {
+	if _, ok, err := verifyUser(db, "nobody", "s3cret"); err != nil || ok {
 		t.Fatalf("verify missing user: ok=%v err=%v (want false, nil)", ok, err)
 	}
 }
@@ -31,10 +31,10 @@ func TestUpsertUser(t *testing.T) {
 	if err := upsertUser(db, "wife", "second"); err != nil {
 		t.Fatalf("upsert update: %v", err)
 	}
-	if ok, _ := verifyUser(db, "wife", "second"); !ok {
+	if _, ok, _ := verifyUser(db, "wife", "second"); !ok {
 		t.Fatal("expected updated password to verify")
 	}
-	if ok, _ := verifyUser(db, "wife", "first"); ok {
+	if _, ok, _ := verifyUser(db, "wife", "first"); ok {
 		t.Fatal("old password should no longer verify")
 	}
 }
@@ -56,7 +56,7 @@ func TestPasswordTooLong(t *testing.T) {
 	if err := createUser(db, "wife", exact); err != nil {
 		t.Fatalf("64-byte password should be accepted: %v", err)
 	}
-	if ok, err := verifyUser(db, "wife", exact); err != nil || !ok {
+	if _, ok, err := verifyUser(db, "wife", exact); err != nil || !ok {
 		t.Fatalf("64-byte password should verify: ok=%v err=%v", ok, err)
 	}
 }
@@ -68,13 +68,32 @@ func TestVerifyMissingUserIsMismatch(t *testing.T) {
 	}
 	// Same result shape as a wrong password for an existing user:
 	// false, nil — never an error, never ok.
-	ok, err := verifyUser(db, "nobody", "s3cret")
+	_, ok, err := verifyUser(db, "nobody", "s3cret")
 	if ok || err != nil {
 		t.Fatalf("missing user: ok=%v err=%v (want false, nil)", ok, err)
 	}
-	ok, err = verifyUser(db, "nobody", "")
+	_, ok, err = verifyUser(db, "nobody", "")
 	if ok || err != nil {
 		t.Fatalf("missing user, empty pw: ok=%v err=%v (want false, nil)", ok, err)
+	}
+}
+
+func TestVerifyUserCaseInsensitive(t *testing.T) {
+	db := tempUsersDB(t)
+	if err := createUser(db, "wife", "s3cret"); err != nil {
+		t.Fatal(err)
+	}
+	canonical, ok, err := verifyUser(db, "WIFE", "s3cret")
+	if err != nil || !ok || canonical != "wife" {
+		t.Fatalf("WIFE should verify as wife: canonical=%q ok=%v err=%v", canonical, ok, err)
+	}
+	canonical, ok, err = verifyUser(db, "Wife", "s3cret")
+	if err != nil || !ok || canonical != "wife" {
+		t.Fatalf("Wife should verify as wife: canonical=%q ok=%v err=%v", canonical, ok, err)
+	}
+	// Creation normalizes to lowercase: no separate 'WIFE' user can be created.
+	if err := createUser(db, "WIFE", "other"); err == nil {
+		t.Fatal("createUser('WIFE') should fail (duplicate of wife)")
 	}
 }
 

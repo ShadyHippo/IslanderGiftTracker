@@ -18,7 +18,9 @@ services:
     # Run as the host user (uid 1000) so ./dev-data is writable. Dev-only file.
     user: "1000:1000"
     ports:
-      - "127.0.0.1:8080:8080"
+      # All interfaces so the phone can test over LAN/Tailscale (dev only).
+      # Production compose keeps 127.0.0.1-only behind SWAG.
+      - "8080:8080"
     environment:
       PORT: "8080"
       DATA_DIR: /data

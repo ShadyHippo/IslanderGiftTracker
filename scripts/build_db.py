@@ -174,11 +174,9 @@ def try_fetch(fname):
                 except Exception:
                     pass
             return data
-        except urllib.error.HTTPError as e:
-            if e.code == 404:
-                return None
-            raise
         except Exception:
+            # Any upstream error (404, 500, timeout) counts as a miss; a flaky
+            # dodo.ac must not kill the whole build.
             return None
     return None
 
@@ -296,7 +294,7 @@ def main():
     db.execute("INSERT INTO meta VALUES ('schema_version', ?), ('build_date', ?)",
                (str(DB_VERSION), __import__("datetime").date.today().isoformat()))
     db.execute("CREATE TABLE items (name TEXT, category TEXT, variation TEXT, style TEXT,"
-               " color1 TEXT, color2 TEXT, buy TEXT, sell TEXT, source TEXT)")
+               " color1 TEXT, color2 TEXT, buy TEXT, sell TEXT, source TEXT, label_themes TEXT)")
     db.execute("CREATE TABLE images (category TEXT, name TEXT, variation TEXT, data BLOB,"
                " url TEXT, PRIMARY KEY (category, name, variation))")
 
@@ -326,13 +324,16 @@ def main():
         def g(row, col):
             i = idx.get(col)
             return row[i] if i is not None and i < len(row) else ''
+        # Clothing sheets carry 'Style 1'/'Style 2' (not 'Style'); merge into one
+        # column so the client matcher can compare against villager styles.
         for row in rows[1:]:
             if not row or not row[idx.get("Name", 0) if "Name" in idx else 0]:
                 continue
-            db.execute("INSERT INTO items VALUES (?,?,?,?,?,?,?,?,?)",
-                       (g(row, "Name"), sheet_name, g(row, "Variation"), g(row, "Style"),
+            style = '; '.join(x for x in (g(row, 'Style 1'), g(row, 'Style 2')) if x) or g(row, 'Style')
+            db.execute("INSERT INTO items VALUES (?,?,?,?,?,?,?,?,?,?)",
+                       (g(row, "Name"), sheet_name, g(row, "Variation"), style,
                         g(row, "Color 1"), g(row, "Color 2"), g(row, "Buy"),
-                        g(row, "Sell"), g(row, "Source")))
+                        g(row, "Sell"), g(row, "Source"), g(row, "Label Themes")))
             n_items += 1
     print(f"    items: {n_items} rows")
 

@@ -2,6 +2,7 @@
   import { onDestroy } from 'svelte';
   import { getRefDbState } from './refdb.svelte';
   import { villagerByName, villagerImage, type VillagerRow } from './villagers';
+  import { giftIdeas, houseItems, type GiftIdea } from './gifts';
   import { route, navigate } from './router';
 
   const refdb = getRefDbState();
@@ -9,6 +10,8 @@
   const name = $derived(route.params.name ?? '');
   let villager: VillagerRow | null = $state(null);
   let imgUrl: string | null = $state(null);
+  let ideas: GiftIdea[] = $state([]);
+  let house: string[] = $state([]);
   // Non-reactive: revoking/creating inside the effect must not re-trigger it.
   let createdUrl: string | null = null;
 
@@ -26,6 +29,15 @@
     if (createdUrl) URL.revokeObjectURL(createdUrl);
     createdUrl = bytes ? URL.createObjectURL(new Blob([bytes])) : null;
     imgUrl = createdUrl;
+  });
+
+  // Separate effect: reads villager, writes only ideas/house (no self-loop).
+  $effect(() => {
+    if (!villager) return;
+    const db = refdb.db;
+    if (!db) return;
+    ideas = giftIdeas(db, villager);
+    house = houseItems(villager);
   });
 
   onDestroy(() => {
@@ -95,6 +107,67 @@
           </dl>
         </section>
       {/if}
+
+      {#if house.length}
+        <section class="rounded-xl border border-green-200 bg-white p-5">
+          <h2 class="mb-3 font-semibold text-green-900">Their house</h2>
+          <div class="flex flex-wrap gap-1.5">
+            {#each house as item}
+              <span class="rounded-full bg-green-100 px-2.5 py-1 text-xs text-green-800">
+                {item}
+              </span>
+            {/each}
+          </div>
+        </section>
+      {/if}
+
+      <section class="rounded-xl border border-green-200 bg-white p-5">
+        <h2 class="mb-1 font-semibold text-green-900">Gift ideas</h2>
+        <p class="mb-3 text-xs text-green-700">
+          Matched against their favorite colors &amp; styles.
+        </p>
+        {#if ideas.length === 0}
+          <p class="text-sm text-green-700">No matches found.</p>
+        {:else}
+          <ul class="divide-y divide-green-100">
+            {#each ideas as idea}
+              <li class="py-2.5">
+                <div class="flex items-baseline justify-between gap-3">
+                  <p class="font-medium text-green-900">
+                    {idea.name}{idea.variation ? ` (${idea.variation})` : ''}
+                  </p>
+                  <span class="shrink-0 text-xs text-green-600">{idea.category}</span>
+                </div>
+                <div class="mt-1 flex flex-wrap gap-1">
+                  {#if idea.tier === 2}
+                    <span class="rounded-full bg-green-700 px-2 py-0.5 text-xs font-semibold text-white">
+                      ★ Perfect match
+                    </span>
+                  {/if}
+                  {#each idea.colorMatch as c}
+                    <span class="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-800">
+                      ♥ {c}
+                    </span>
+                  {/each}
+                  {#each idea.trimMatch as c}
+                    <span class="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">
+                      ♥ {c} (trim)
+                    </span>
+                  {/each}
+                  {#each idea.styleMatch as s}
+                    <span class="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-800">
+                      style: {s}
+                    </span>
+                  {/each}
+                </div>
+                {#if idea.labelThemes}
+                  <p class="mt-1 text-xs text-green-500">Themes: {idea.labelThemes}</p>
+                {/if}
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      </section>
 
       <section class="rounded-xl border border-green-200 bg-white p-5">
         <h2 class="mb-3 font-semibold text-green-900">About</h2>

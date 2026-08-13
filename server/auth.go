@@ -49,6 +49,10 @@ func initUsersSchema(db *sql.DB) error {
 }
 
 func createUser(db *sql.DB, username, password string) error {
+	username = strings.ToLower(strings.TrimSpace(username))
+	if username == "" {
+		return errors.New("username must not be empty")
+	}
 	if err := validatePassword(password); err != nil {
 		return err
 	}
@@ -64,6 +68,10 @@ func createUser(db *sql.DB, username, password string) error {
 // upsertUser sets a user's password, creating the user if they don't exist.
 // Used by the on-server admin flag -set-password.
 func upsertUser(db *sql.DB, username, password string) error {
+	username = strings.ToLower(strings.TrimSpace(username))
+	if username == "" {
+		return errors.New("username must not be empty")
+	}
 	if err := validatePassword(password); err != nil {
 		return err
 	}
@@ -96,22 +104,27 @@ func validatePassword(password string) error {
 	return nil
 }
 
-func verifyUser(db *sql.DB, username, password string) (bool, error) {
+// verifyUser checks credentials case-insensitively and returns the canonical
+// (stored) username on success, so sessions and progress files always use the
+// same spelling ("Wife" and "wife" are the same user).
+func verifyUser(db *sql.DB, username, password string) (string, bool, error) {
+	var stored string
 	var hash string
-	err := db.QueryRow("SELECT password_hash FROM users WHERE username = ?", username).Scan(&hash)
+	err := db.QueryRow("SELECT username, password_hash FROM users WHERE lower(username) = lower(?)",
+		username).Scan(&stored, &hash)
 	if errors.Is(err, sql.ErrNoRows) {
 		// Run a real bcrypt comparison against a dummy hash so response time
 		// is the same whether the username exists or not.
 		_ = bcrypt.CompareHashAndPassword(dummyHash, []byte(password))
-		return false, nil
+		return "", false, nil
 	}
 	if err != nil {
-		return false, err
+		return "", false, err
 	}
 	if bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) != nil {
-		return false, nil
+		return "", false, nil
 	}
-	return true, nil
+	return stored, true, nil
 }
 
 // sessionStore keeps active sessions in memory (home-server scale; restart = re-login).
@@ -219,12 +232,12 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request"})
 		return
 	}
-	req.Username = strings.TrimSpace(req.Username)
+	req.Username = strings.ToLower(strings.TrimSpace(req.Username))
 	if len(req.Password) > maxPasswordLen {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "password too long"})
 		return
 	}
-	ok, err := verifyUser(s.usersDB, req.Username, req.Password)
+	canonical, ok, err := verifyUser(s.usersDB, req.Username, req.Password)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
 		return
@@ -235,14 +248,14 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.loginLimit.reset(ip)
-	tok, err := s.sessions.create(req.Username)
+	tok, err := s.sessions.create(canonical)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
 		return
 	}
 	s.sessionCookie(w, tok)
-	log.Printf("login ok user=%q ip=%s", req.Username, ip)
-	writeJSON(w, http.StatusOK, map[string]string{"username": req.Username})
+	log.Printf("login ok user=%q ip=%s", canonical, ip)
+	writeJSON(w, http.StatusOK, map[string]string{"username": canonical})
 }
 
 // clientIP returns the real client IP. Behind SWAG the server is only reachable

@@ -14,10 +14,13 @@
   let groups: GiftGroup[] = $state([]);
   let house: string[] = $state([]);
   interface GroupFilter {
+    /** catalog tier: in-game Nook Shopping categories (furniture only). */
+    cats: string[];
+    /** type tier: taxonomy paths (furniture) / flat categories (clothing). */
     types: string[];
     buyable: boolean;
   }
-  const NO_FILTER: GroupFilter = { types: [], buyable: false };
+  const NO_FILTER: GroupFilter = { cats: [], types: [], buyable: false };
   let groupFilters = $state<Record<string, GroupFilter>>({});
   let showAll = $state<Record<string, boolean>>({});
   let groupImages = $state(new Map<string, Map<string, Uint8Array<ArrayBuffer>>>());
@@ -30,6 +33,14 @@
   function goBack() {
     if (window.history.length > 1) void navigate(-1);
     else void navigate('/');
+  }
+
+  function toggleCat(groupKey: string, name: string) {
+    const f = groupFilters[groupKey] ?? { ...NO_FILTER };
+    const set = new Set(f.cats);
+    if (set.has(name)) set.delete(name);
+    else set.add(name);
+    groupFilters[groupKey] = { ...f, cats: [...set] };
   }
 
   function toggleType(groupKey: string, typePath: string) {
@@ -49,11 +60,12 @@
     groupFilters[groupKey] = { ...NO_FILTER };
   }
 
-  // Type pills are OR (Kitchen + Appliance = both subtrees); buyable is AND.
-  // Clothing uses its flat categories as the single pill level.
+  // Catalog tier (OR) AND type tier (OR) AND buyable. Clothing has no catalog
+  // tier — its type pills ARE the in-game categories.
   function filteredItems(group: GiftGroup): GiftIdea[] {
     const f = groupFilters[group.key] ?? NO_FILTER;
     let items = group.items;
+    if (f.cats.length > 0) items = items.filter((i) => f.cats.includes(i.category));
     if (f.types.length > 0) {
       items = items.filter((i) => {
         const tp = group.key === 'furniture' ? i.typePath : i.category;
@@ -98,6 +110,20 @@
       groups.map((g) => [
         g.key,
         typeTree(g.items, g.key === 'clothing' ? (i) => i.category : undefined),
+      ]),
+    ),
+  );
+  // Catalog tier (furniture only): in-game Nook Shopping categories, in the
+  // game's own order, with per-category item counts.
+  const groupCats = $derived(
+    new Map(
+      groups.map((g) => [
+        g.key,
+        g.key === 'furniture'
+          ? g.categories
+              .map((c) => ({ name: c, count: g.items.filter((i) => i.category === c).length }))
+              .filter((c) => c.count > 0)
+          : [],
       ]),
     ),
   );
@@ -244,8 +270,11 @@
                 <TypePills
                   tree={groupTrees.get(group.key) ?? []}
                   selected={groupFilters[group.key]?.types ?? []}
+                  cats={groupCats.get(group.key) ?? []}
+                  selectedCats={groupFilters[group.key]?.cats ?? []}
                   buyable={groupFilters[group.key]?.buyable ?? false}
                   onToggleType={(p) => toggleType(group.key, p)}
+                  onToggleCat={(c) => toggleCat(group.key, c)}
                   onToggleBuyable={() => toggleBuyable(group.key)}
                   onClear={() => clearFilters(group.key)}
                 />

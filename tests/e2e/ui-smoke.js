@@ -154,6 +154,27 @@ try {
   }
   console.log(`PASS: buyable pill filters (${full} -> ${buyableRows})`);
 
+  // Catalog tier (in-game categories): Housewares filters rows by game category
+  const housewares = furn.locator('.pill-cat:has-text("Housewares")');
+  if ((await housewares.count()) === 0) {
+    console.log('SKIP: no Housewares catalog pill for this villager');
+  } else {
+    await housewares.click();
+    await page.waitForTimeout(300);
+    const catRows = await furn.locator('li').allTextContents();
+    if (catRows.length === 0 || catRows.some((t) => !t.includes('Housewares'))) {
+      console.error('FAIL: Catalog filter shows non-Housewares rows or nothing');
+      process.exit(1);
+    }
+    await housewares.click();
+    await page.waitForTimeout(300);
+    if ((await rowCount()) !== full) {
+      console.error('FAIL: Catalog deselect did not restore rows');
+      process.exit(1);
+    }
+    console.log(`PASS: catalog tier filters by game category (${catRows.length} rows, all Housewares)`);
+  }
+
   // Irrelevant expander nests the rest (Surfaces, Music, ...)
   await page.click('summary:has-text("Irrelevant")');
   await page.waitForSelector('summary:has-text("Surfaces")', { timeout: 5000 });

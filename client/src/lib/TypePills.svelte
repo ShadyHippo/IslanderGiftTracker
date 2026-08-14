@@ -1,20 +1,33 @@
 <script lang="ts">
   // Hierarchical type filter pills: multi-select (OR across types) + a buyable
   // (AND) toggle. Furniture drills down the catalog tree (Kitchen > Appliance > …);
-  // clothing passes a flat single-level tree. Filter state lives in the parent —
-  // this component is purely presentational, owning only the drill-down path.
+  // clothing passes a flat single-level tree. Furniture also gets a "catalog"
+  // tier above the type pills — the in-game Nook Shopping categories
+  // (Housewares, Wall-mounted, ...) the player actually sees. Filter state lives
+  // in the parent — this component is purely presentational, owning only the
+  // drill-down path.
   import type { TypeNode } from './gifts';
+
+  interface CatPill {
+    name: string;
+    count: number;
+  }
 
   interface Props {
     tree: TypeNode[];
     selected: string[];
+    /** in-game catalog categories (furniture); empty for clothing. */
+    cats: CatPill[];
+    selectedCats: string[];
     buyable: boolean;
     onToggleType: (path: string) => void;
+    onToggleCat: (name: string) => void;
     onToggleBuyable: () => void;
     onClear: () => void;
   }
 
-  let { tree, selected, buyable, onToggleType, onToggleBuyable, onClear }: Props = $props();
+  let { tree, selected, cats, selectedCats, buyable, onToggleType, onToggleCat, onToggleBuyable, onClear }: Props =
+    $props();
 
   // Current drill location (array of path segments). Falls back to root if the
   // path no longer exists in a new tree (e.g. villager changed).
@@ -46,13 +59,30 @@
     return nodeMap.get(effectivePath.join('/'))!.children;
   });
 
-  const anyFilter = $derived(selected.length > 0 || buyable);
+  const anyFilter = $derived(selected.length > 0 || selectedCats.length > 0 || buyable);
   const drill = (node: TypeNode) => {
     path = [...effectivePath, node.label];
   };
 </script>
 
 <div class="type-pills border-t border-green-100 px-4 py-2">
+  {#if cats.length > 0}
+    <div class="mb-1.5 flex flex-wrap items-center gap-1.5">
+      <span class="text-[10px] font-semibold uppercase tracking-wide text-green-400">Catalog</span>
+      {#each cats as cat}
+        <button
+          class="pill-cat rounded-full px-2.5 py-1 text-xs {selectedCats.includes(cat.name)
+            ? 'bg-green-700 text-white'
+            : 'bg-green-100 text-green-800'}"
+          aria-pressed={selectedCats.includes(cat.name)}
+          onclick={() => onToggleCat(cat.name)}
+        >
+          {cat.name} <span class="opacity-70">{cat.count}</span>
+        </button>
+      {/each}
+    </div>
+  {/if}
+
   {#if effectivePath.length > 0}
     <div class="pill-crumbs mb-1.5 flex flex-wrap items-center gap-1 text-xs text-green-600">
       <button
@@ -74,6 +104,9 @@
   {/if}
 
   <div class="flex flex-wrap items-center gap-1.5">
+    {#if cats.length > 0}
+      <span class="text-[10px] font-semibold uppercase tracking-wide text-green-400">Type</span>
+    {/if}
     {#each level as node}
       <div
         class="inline-flex items-center overflow-hidden rounded-full text-xs {selected.includes(node.path)

@@ -1,15 +1,17 @@
-"""Furniture type catalog for the ACNH reference db (two levels).
+"""Furniture type catalog for the ACNH reference db (1-3 levels).
 
-Every furniture item gets:
-  - broad   type (Kitchen, Decoration, Furniture, Lighting, ...) — the parent group
-  - specific type (Cup, Guitar, Chair, Table, ...)                — the discrete item kind
+Every furniture item gets a category path, e.g. 'Kitchen/Appliance/Fridge',
+'Decor/Instruments/Guitar', 'Furniture/Chair'. Items inherit every ancestor,
+so selecting 'Kitchen' includes 'Kitchen/Appliance', 'Kitchen/Cups', etc.
 
-Single source of truth: build_db.py imports classify() and writes items.type /
-items.subtype during every build, so the catalog survives rebuilds.
+Eight top-level groups (2026-08 restructure): Furniture, Kitchen,
+Electronics & Appliances, Decor, Toys, Outdoors, Bathroom, Pets. The old
+15-group layout (Pet, Container, Wall Decor, Lighting, ... as roots) was too
+noisy and hid junk buckets; OVERRIDES are migrated to the new layout below.
 
 Mechanisms, applied in order:
   1. KEYWORD_RULES — substring match on the lowercased name (first hit wins).
-  2. OVERRIDES     — explicit name -> (broad, specific) for items the rules miss.
+  2. OVERRIDES     — explicit name -> path for items the rules miss or misroute.
 Anything still unmatched after both -> ("Other", "Other").
 
 Run:  python3 scripts/furniture_types.py   # writes res/furniture_types.tsv + coverage report
@@ -663,98 +665,133 @@ OVERRIDES.update({
 
 
 # (keywords, (broad, specific)) — first substring match on the lowercased name wins.
+# Order is deliberate:
+#   - appliance before food     (dishwasher is not a dish)
+#   - electronics before food   (candy machine is not candy)
+#   - food before toys          (carrot cake is not a toy)
+#   - figurines before sports   (football fish model is not a sport)
+#   - sports before toys        (basketball hoop is not a ball toy)
+#   - electronics before wall   (wall-mounted TV is not wall decor)
+# NO bare "car"/"amp" keywords — they caught carrot cake and champion's pennant.
 KEYWORD_RULES = [
-    # Seating
+    # ---- Kitchen: appliances & ware ----
+    (("stove", "oven", "fridge", "refrigerator", "freezer", "toaster", "microwave",
+      "espresso", "coffee machine", "mixer", "blender", "dishwasher", "cooker",
+      "rice cooker", "juicer", "kettle", "deep fryer", "range hood"),
+     ("Kitchen", "Appliance")),
+    (("counter", "island", "kitchen", "system", "sink", "register", "cash", "cart",
+      "serving", "dispenser", "pitcher"), ("Kitchen", "Kitchenware")),
+    (("mug", "teacup", "tumbler"), ("Kitchen", "Cups")),
+    (("bowl", "dinnerware", "cutlery", "fork", "spoon", "chopsticks",
+      "knife block", "spice rack", "cookware", "cutting board", "bakeware",
+      "steamer-basket", "soup kettle"), ("Kitchen", "Cookware")),
+    (("tea set",), ("Kitchen", "Tea")),
+    (("scale",), ("Kitchen", "Scale")),
+    # ---- Electronics & appliances ----
+    (("television", "tv"), ("Electronics", "TV")),
+    (("stereo", "speaker", "music player", "record player", "jukebox", "turntable",
+      "radio", "tape recorder", "dj", "sampler"), ("Electronics", "Audio")),
+    (("computer", "laptop", "server"), ("Electronics", "Computer")),
+    (("phone", "intercom"), ("Electronics", "Phone")),
+    (("camera", "video camera", "surveillance"), ("Electronics", "Camera")),
+    (("monitor", "projector"), ("Electronics", "Screen")),
+    (("console", "game boy", "switch"), ("Electronics", "Game Console")),
+    (("amplifier", "headphone"), ("Electronics", "Audio")),
+    (("fan",), ("Electronics", "Fan")),
+    (("heater", "radiator"), ("Electronics", "Heater")),
+    (("air conditioner",), ("Electronics", "Air Conditioner")),
+    (("machine",), ("Electronics", "Machine")),
+    (("robot",), ("Electronics", "Machine")),
+    (("washer", "dryer", "vacuum", "humidifier"), ("Electronics", "Appliance")),
+    (("generator",), ("Electronics", "Generator")),
+    # ---- Kitchen: food & drink (after electronics so vending machines win) ----
+    (("soup", "curry", "pie", "cake", "jam", "bread", "pizza", "salad", "ramen",
+      "cookie", "candy", "food", "meal", "dish", "snack", "scone", "crepe",
+      "pudding", "jelly", "smoothie", "fried", "stew", "noodles", "rice",
+      "porridge", "quiche", "sandwich", "tart", "pasta", "gnocchi", "risotto",
+      "pilaf", "biryani", "omurice", "sushi", "potato", "zongzi", "songpyeon",
+      "tangyuan", "dango", "bento", "chowder", "pancake", "waffle", "toast",
+      "bagel", "donut", "carpaccio", "carrot", "cheese", "mushroom", "casserole",
+      "grilled", "barbecue", "hotdog", "fries", "chips", "gratin", "fruit",
+      "pizza", "omelet", "miso", "sashimi", "tempura", "dumpling", "crepe",
+      "spaghetti"), ("Kitchen", "Food")),
+    (("juice", "soda", "milk", "smoothie", "latte", "shake", "drink", "coffee",
+      "lemonade", "cider", "champagne", "sake", "wine", "beer"),
+     ("Kitchen", "Drink")),
+    # ---- Bathroom ----
+    (("bathtub", "bathroom", "shower", "toilet", "bidet", "towel", "soap", "sink",
+      "washbasin", "washtub", "bath", "tissue"), ("Bathroom", "Bathroom")),
+    # ---- Furniture: seating, tables, beds, storage-ish structures ----
     (("chair", "seat"), ("Furniture", "Chair")),
     (("stool",), ("Furniture", "Stool")),
     (("bench",), ("Furniture", "Bench")),
     (("sofa", "couch", "loveseat", "lounge", "chaise"), ("Furniture", "Sofa")),
-    # Tables / desks
     (("table", "kotatsu", "billiard", "podium"), ("Furniture", "Table")),
     (("desk",), ("Furniture", "Desk")),
     (("vanity",), ("Furniture", "Vanity")),
-    # Beds
-    (("bed", "hammock", "futon", "cot", "crib", "sleeping bag", "couch bed"), ("Furniture", "Bed")),
-    # Storage
-    (("wardrobe", "dresser", "chest", "cabinet", "closet", "locker", "safe", "drawer",
-      "shelf", "stand", "trophy case", "record box", "box", "display case",
-      "organizer", "rack", "shed", "storage"), ("Furniture", "Storage")),
-    # Kitchen broad
-    (("stove", "oven", "fridge", "refrigerator", "freezer", "toaster", "microwave",
-      "espresso", "coffee", "mixer", "blender", "dishwasher", "cooker", "rice cooker",
-      "juicer", "kettle"), ("Kitchen", "Appliance")),
-    (("pot", "pan", "skillet", "frying", "cookware", "cutting board", "bakeware"), ("Kitchen", "Cookware")),
-    (("counter", "island", "kitchen", "system", "sink", "register", "cash", "cart", "serving"), ("Kitchen", "Kitchenware")),
-    (("cup", "mug", "glass", "pitcher", "tray"), ("Kitchen", "Cup")),
-    (("food", "dish", "meal"), ("Kitchen", "Food")),
-    # Bathroom
-    (("bathroom", "bath", "shower", "toilet", "bidet", "towel", "soap", "sink",
-      "washbasin", "washtub"), ("Bathroom", "Bathroom")),
-    # Lighting
-    (("lamp", "lantern", "candle", "light", "torch", "chandelier", "uplight", "bulb",
-      "spotlight", "ceiling fan", "festival lantern"), ("Lighting", "Lamp")),
-    # Plants
+    (("bed", "hammock", "futon", "cot", "crib", "sleeping bag"), ("Furniture", "Bed")),
+    (("clock", "watch"), ("Furniture", "Clock")),
+    (("pillar", "column"), ("Furniture", "Pillar")),
+    (("ladder",), ("Furniture", "Ladder")),
+    # ---- Decor: lighting / wreaths & garlands / instruments / plants -------
+    (("lamp", "lantern", "candle", "light", "torch", "chandelier", "uplight",
+      "bulb", "spotlight", "ceiling fan", "festival lantern", "disco", "neon",
+      "plasma ball"), ("Decor", "Lighting")),
+    (("wreath", "garland"), ("Decor", "Wall Decor")),
+    (("guitar", "piano", "drum", "violin", "kazoo", "marimba", "saxophone",
+      "trumpet", "cello", "harp", "ukulele", "sitar", "flute", "bongo", "conga",
+      "synthesizer", "tuba", "mic", "gong", "pipa", "clarinet", "organ",
+      "theremin", "busking", "recycled-can", "metronome", "wooden fish",
+      "electric bass"), ("Decor", "Instruments")),
     (("plant", "bonsai", "cactus", "potted", "flower", "bush", "shrub", "topiary",
-      "tree", "bamboo shoot", "monstera", "palm", "lily", "rose", "tulip", "windflower",
-      "hyacinth", "cosmos", "sunflower", "mum", "pansy", "wisteria", "azalea",
-      "hydrangea", "grass", "fern", "ivy", "coconut"), ("Plant", "Plant")),
-    # Instruments (under Decoration: a guitar is a decoration, specifically a guitar)
-    (("guitar", "piano", "drum", "violin", "kazoo", "marimba", "saxophone", "trumpet",
-      "cello", "harp", "ukulele", "sitar", "flute", "bongo", "conga", "synthesizer",
-      "tuba", "mic", "gong", "pipa", "clarinet", "keyboard", "organ", "theremin",
-      "busking", "recycled-can"), ("Decoration", "Instrument")),
-    # Electronics
-    (("tv", "television", "stereo", "radio", "computer", "laptop", "phone", "console",
-      "screen", "monitor", "camera", "amplifier", "dj", "turntable", "record player",
-      "speaker", "jukebox", "server", "fan", "heater", "air conditioner", "robot",
-      "amp", "tape recorder", "projector", "music player", "machine"), ("Electronics", "Electronics")),
-    # Clocks
-    (("clock",), ("Furniture", "Clock")),
-    # Toys / games
-    (("toy", "doll", "plush", "bear", "panda", "game", "ball", "block", "train",
-      "car", "rocket", "arcade", "pinball", "skateboard", "tricycle", "kart",
-      "scooter", "bike", "hula hoop", "go board", "chess", "foosball", "puzzle",
-      "dice", "tent", "sandbox", "sand castle", "dollhouse", "slide", "seesaw",
-      "playground", "springy", "stroller", "tricycle"), ("Toy", "Toy")),
-    # Pets / animals
-    (("tank", "cage", "bird", "hamster", "fish", "aquarium", "pet", "turtle", "cricket",
-      "emu", "ant", "bug", "frog", "aquarium"), ("Pet", "Pet")),
-    # Containers
-    (("basket", "crate", "bucket", "barrel", "hamper", "trash", "bin", "bag",
-      "cart", "cooler", "lunch", "picnic", "pot", "canister", "jar", "case",
-      "briefcase", "suitcase", "waste"), ("Container", "Container")),
-    # Sculptures / art
-    (("statue", "sculpture", "urn", "bust", "monument", "pyramid", "skeleton",
-      "trophy", "model", "figure", "head", "llama", "rocket", "figurine"), ("Decoration", "Figurine")),
-    # Wall decor
+      "tree", "bamboo shoot", "monstera", "palm", "lily", "rose", "tulip",
+      "windflower", "hyacinth", "cosmos", "sunflower", "mum", "pansy", "wisteria",
+      "azalea", "hydrangea", "grass", "fern", "ivy", "coconut", "terrarium",
+      "vine", "wheat field", "carnation", "planter"), ("Decor", "Plants")),
+    (("model", "trophy", "statue", "figurine", "bust", "monument", "urn",
+      "skeleton", "pyramid", "figure", "sphinx", "sculpture"), ("Decor", "Figurines & Models")),
+    (("armor",), ("Decor", "Armor & Weapons")),
     (("wall", "hanging", "mirror", "frame", "poster", "flag", "sign", "garland",
-      "scroll", "tapestry", "plate", "wreath", "pennant", "panel", "partition",
-      "screen", "chalkboard", "board", "print", "banner", "curtain", "map",
-      "mounted", "swag", "sconce"), ("Wall Decor", "Wall Decor")),
-    # Ceiling decor
-    (("mobile", "chandelier", "ceiling", "balloon", "festive lights", "party lights"), ("Ceiling Decor", "Ceiling Decor")),
-    # Outdoor / garden
-    (("garden", "fence", "arch", "fountain", "birdbath", "standee", "gnome", "solar",
-      "outdoor", "pool", "beach", "umbrella", "yard", "campfire", "picnic",
-      "barbecue", "grill", "water pump", "well", "rock", "stone", "sports",
-      "goal", "fitness", "exercise", "treadmill", "weight", "punching"), ("Outdoor", "Outdoor")),
-    # Rugs
-    (("rug", "carpet", "mat", "tatami", "floor"), ("Rug", "Rug")),
-    # Pillars / structures
-    (("pillar", "column", "arch"), ("Furniture", "Pillar")),
-    # Kitchen food / drink / ware (re-added after rule split)
-    (("soup", "curry", "pie", "cake", "jam", "bread", "pizza", "salad", "ramen",
-      "cookie", "candy", "food", "meal", "dish", "snack", "scone", "crepe", "pudding",
-      "jelly", "smoothie", "fried", "stew", "noodles", "rice", "porridge", "quiche",
-      "sandwich", "tart", "pasta", "gnocchi", "risotto", "pilaf", "biryani", "omurice",
-      "sushi", "curry", "potato", "zongzi", "songpyeon", "tangyuan", "dango",
-      "bento", "chowder", "pancake", "waffle", "toast", "bagel", "donut", "cake"),
-     ("Kitchen", "Food")),
-    (("juice", "soda", "milk", "smoothie", "latte", "shake", "drink", "water",
-      "tea", "coffee"), ("Kitchen", "Drink")),
-    (("cup", "mug", "glass", "pitcher", "teacup", "tumbler"), ("Kitchen", "Cups")),
-    (("plate", "bowl", "dish", "dinnerware", "cutlery", "fork", "spoon", "chopsticks",
-      "knife block", "spice rack"), ("Kitchen", "Plates")),
+      "scroll", "tapestry", "wreath", "pennant", "panel", "partition", "screen",
+      "chalkboard", "whiteboard", "corkboard", "clipboard", "bulletin", "dartboard",
+      "print", "banner", "curtain", "map", "mounted",
+      "swag", "sconce", "stockings", "plaque", "photo", "doorplate", "hallway",
+      "door decoration", "sticker"), ("Decor", "Wall Decor")),
+    (("mobile", "chandelier", "ceiling", "balloon", "festive lights", "party lights"),
+     ("Decor", "Ceiling Decor")),
+    (("rug", "carpet", "tatami"), ("Decor", "Rugs")),
+    # ---- Outdoors: sports & fitness before toys (basketball hoop) ----
+    (("treadmill", "exercise", "weight", "punching", "barbell", "dumbbell",
+      "yoga", "ring fit"), ("Outdoors", "Fitness")),
+    (("basketball", "volleyball", "baseball", "soccer", "football", "golf",
+      "goal", "sports", "bike"), ("Outdoors", "Sports")),
+    # ---- Toys (no bare "car"/"bike": carrot cake, cruiser bike handled above) ----
+    (("toy", "doll", "plush", "teddy", "game", "ball", "block", "train", "rocket",
+      "arcade", "pinball", "skateboard", "tricycle", "kart", "scooter", "car",
+      "hula hoop", "go board", "chess", "foosball", "puzzle", "dice", "tent",
+      "sandbox", "sand castle", "dollhouse", "slide", "seesaw", "playground",
+      "springy", "stroller", "bear", "rocking horse", "ferris wheel",
+      "carousel", "balancing toy", "card", "panda"), ("Toys", "Toy")),
+    # ---- Pets (deliberately small: the old Pet drawer is gone) ----
+    (("hamster", "pet", "cage", "birdcage", "ant farm", "aquarium", "cat tower",
+      "cat tree"), ("Pets", "Pet")),
+    # ---- Storage & containers ----
+    (("wardrobe", "dresser", "chest", "cabinet", "closet", "locker", "safe",
+      "drawer", "shelf", "rack", "organizer", "storage", "display case",
+      "trophy case", "record box", "box", "case", "stand", "container",
+      "basket", "crate", "barrel", "bin", "hamper", "trash", "waste", "bag",
+      "suitcase", "briefcase", "bucket", "pail", "canister", "cooler",
+      "backpack", "cupboard"), ("Furniture", "Storage")),
+    # ---- Outdoors: garden & structures ----
+    (("garden", "fountain", "arch", "well", "rock", "stone", "boulder", "fence",
+      "gnome", "pond", "pool", "water pump", "faucet", "hydrant", "barbecue",
+      "grill", "smoker", "campfire", "fire pit", "bonfire", "picnic", "beach",
+      "yard", "scarecrow", "plaza", "gazebo", "pagoda", "pergola", "bridge",
+      "torii", "gate", "shed", "silo", "windmill", "storefront", "stall",
+      "station", "stage", "scaffolding", "tower", "building", "breakwater",
+      "pole", "cover", "cone", "tire", "siren", "float", "wagon", "sleigh",
+      "life ring", "maypole", "clothesline", "doghouse", "telescope",
+      "lawn mower", "firewood", "leaf pile", "sunflower"), ("Outdoors", "Garden")),
 ]
 
 def classify(name):
@@ -788,16 +825,342 @@ def type_for(name):
     return classify(name)[0]
 
 OVERRIDES = {k.lower(): v for k, v in OVERRIDES.items()}
+
+# ---- 2026-08 restructure: 15 top-levels -> 8 ------------------------------
+# Migrate old override broads. Renamed broads keep their specific; merged
+# broads (Wall Decor, Lighting, Plant, Rug, Ceiling Decor, Umbrella) drop the
+# specific and become Decor/<group>; junk broads (Pet, Container) dissolve.
+_MERGE_INTO_DECOR = {
+    "Wall Decor": "Wall Decor",
+    "Lighting": "Lighting",
+    "Plant": "Plants",
+    "Rug": "Rugs",
+    "Ceiling Decor": "Ceiling Decor",
+    "Umbrella": "Parasols",
+}
+_SPECIAL = {
+    ("Decoration", "Decor"): ("Decor", "Seasonal"),        # holiday/seasonal decor
+    ("Decoration", "Mounted Display"): ("Decor", "Wall Decor"),
+    ("Decoration", "Instrument"): ("Decor", "Instruments"),
+    ("Decoration", "Parasol"): ("Decor", "Parasols"),
+    ("Kitchen", "Cup"): ("Kitchen", "Cups"),
+    # Consolidate tiny one-off specifics into ~14 Decor children
+    ("Decoration", "Figurine"): ("Decor", "Figurines & Models"),
+    ("Decoration", "Altar"): ("Decor", "Figurines & Models"),
+    ("Decoration", "Cannon"): ("Decor", "Figurines & Models"),
+    ("Decoration", "Cave"): ("Decor", "Figurines & Models"),
+    ("Decoration", "Suit"): ("Decor", "Figurines & Models"),
+    ("Decoration", "Tower"): ("Decor", "Figurines & Models"),
+    ("Decoration", "Mound"): ("Decor", "Figurines & Models"),
+    ("Decoration", "Machine"): ("Decor", "Figurines & Models"),
+    ("Decoration", "Lab"): ("Electronics", "Lab"),
+    ("Decoration", "Medical"): ("Electronics", "Medical"),
+    ("Decoration", "Armor"): ("Decor", "Armor & Weapons"),
+    ("Decoration", "Weapon"): ("Decor", "Armor & Weapons"),
+    ("Decoration", "Helm"): ("Decor", "Armor & Weapons"),
+    ("Decoration", "Fireplace"): ("Decor", "Fireplaces & Hearths"),
+    ("Decoration", "Hearth"): ("Decor", "Fireplaces & Hearths"),
+    ("Decoration", "Desk"): ("Decor", "Desk & Office"),
+    ("Decoration", "Desk Toy"): ("Decor", "Desk & Office"),
+    ("Decoration", "Fortune"): ("Decor", "Desk & Office"),
+    ("Decoration", "Study"): ("Decor", "Desk & Office"),
+    ("Decoration", "Vase"): ("Decor", "Vases & Ornaments"),
+    ("Decoration", "Globe"): ("Decor", "Vases & Ornaments"),
+    ("Decoration", "Bell"): ("Decor", "Vases & Ornaments"),
+    ("Decoration", "Bouquet"): ("Decor", "Vases & Ornaments"),
+    ("Decoration", "Bottle"): ("Decor", "Vases & Ornaments"),
+    ("Decoration", "Bottles"): ("Decor", "Vases & Ornaments"),
+    ("Decoration", "Cash"): ("Decor", "Vases & Ornaments"),
+    ("Decoration", "Coin"): ("Decor", "Vases & Ornaments"),
+    ("Decoration", "Gold"): ("Decor", "Vases & Ornaments"),
+    ("Decoration", "Heart"): ("Decor", "Vases & Ornaments"),
+    ("Decoration", "Ring"): ("Decor", "Vases & Ornaments"),
+    ("Decoration", "Ship"): ("Decor", "Vases & Ornaments"),
+    ("Decoration", "Sphere"): ("Decor", "Vases & Ornaments"),
+    ("Decoration", "Cornucopia"): ("Decor", "Vases & Ornaments"),
+    ("Decoration", "Fragrance"): ("Decor", "Vases & Ornaments"),
+    ("Decoration", "Tray"): ("Decor", "Vases & Ornaments"),
+    ("Decoration", "Holder"): ("Decor", "Wall Decor"),
+    ("Decoration", "Pipes"): ("Decor", "Vases & Ornaments"),
+    ("Decoration", "Log"): ("Decor", "Vases & Ornaments"),
+    ("Decoration", "Moon"): ("Decor", "Vases & Ornaments"),
+    ("Decoration", "Cauldron"): ("Decor", "Vases & Ornaments"),
+    ("Decoration", "Watch"): ("Furniture", "Clock"),
+    ("Decoration", "Photo"): ("Decor", "Wall Decor"),
+    ("Decoration", "Plaque"): ("Decor", "Wall Decor"),
+    ("Decoration", "Art"): ("Decor", "Art & Craft"),
+    ("Decoration", "Craft"): ("Decor", "Art & Craft"),
+    ("Decoration", "Book"): ("Decor", "Art & Craft"),
+    ("Decoration", "Books"): ("Decor", "Art & Craft"),
+    ("Decoration", "Magazine"): ("Decor", "Art & Craft"),
+    ("Decoration", "Magazines"): ("Decor", "Art & Craft"),
+    ("Decoration", "Paper"): ("Decor", "Art & Craft"),
+    ("Decoration", "Papers"): ("Decor", "Art & Craft"),
+    ("Decoration", "Spray"): ("Decor", "Art & Craft"),
+    ("Decoration", "Gear"): ("Decor", "Vases & Ornaments"),
+}
+for _name, _path in list(OVERRIDES.items()):
+    if _path in _SPECIAL:
+        OVERRIDES[_name] = _SPECIAL[_path]
+        continue
+    _b, _s = _path
+    if _b == "Decoration":
+        OVERRIDES[_name] = ("Decor", _s)
+    elif _b == "Outdoor":
+        OVERRIDES[_name] = ("Outdoors", _s) if _s in ("Sports", "Fitness") else ("Outdoors", "Garden")
+    elif _b == "Toy":
+        OVERRIDES[_name] = ("Toys", _s)
+    elif _b in _MERGE_INTO_DECOR:
+        OVERRIDES[_name] = ("Decor", _MERGE_INTO_DECOR[_b])
+    elif _b == "Instrument":
+        OVERRIDES[_name] = ("Decor", "Instruments")
+    elif _b == "Pet":
+        OVERRIDES[_name] = ("Pets", "Pet")
+    elif _b == "Container":
+        OVERRIDES[_name] = ("Furniture", "Storage")
+
+# New classifications for the restructure (junk drawers dissolved, key
+# substring bugs fixed — bare "car" caught carrot cake, bare "amp" caught
+# champion's pennant, and the broad Pet rule swallowed fish/bug models).
+OVERRIDES.update({
+    # Antiques / furniture
+    "antique bureau": ("Furniture", "Storage"),
+    "study carrel": ("Furniture", "Desk"),
+    "tea table": ("Furniture", "Table"),
+    "utility wagon": ("Outdoors", "Garden"),
+    # Food the keyword rules can't see
+    "tantanmen": ("Kitchen", "Food"),
+    "fish-and-chips": ("Kitchen", "Food"),
+    "champiñones al ajillo": ("Kitchen", "Food"),
+    "fancy tea set": ("Kitchen", "Tea"),
+    "milk can": ("Kitchen", "Kitchenware"),
+    "handy water cooler": ("Kitchen", "Drink"),
+    "water cooler": ("Kitchen", "Drink"),
+    "butter churn": ("Kitchen", "Cookware"),
+    # Vending / arcade machines must not become food or toys
+    "capsule-toy machine": ("Electronics", "Machine"),
+    "pinball machine": ("Toys", "Arcade"),
+    "TV camera": ("Electronics", "Camera"),
+    "sample case": ("Electronics", "Audio"),
+    "keyboard": ("Decor", "Instruments"),
+    # Pets (small, deliberate — the old 89-item Pet drawer is gone)
+    "tank": ("Pets", "Pet"),
+    "crab tank": ("Pets", "Pet"),
+    # Decor stragglers out of the junk piles
+    "cherry-blossom-petal pile": ("Decor", "Seasonal"),
+    "spooky carriage": ("Decor", "Seasonal"),
+    "giant ornament": ("Decor", "Seasonal"),
+    "dormant volcano": ("Decor", "Figurines & Models"),
+    "water bird": ("Decor", "Figurines & Models"),
+    "wooden fish": ("Decor", "Instruments"),
+    "fish doorplate": ("Decor", "Wall Decor"),
+    "autograph cards": ("Decor", "Wall Decor"),
+    "fancy frame": ("Decor", "Wall Decor"),
+    "disco ball": ("Decor", "Lighting"),
+    "plasma ball": ("Decor", "Lighting"),
+    "modeling clay": ("Decor", "Art & Craft"),
+    "glowing-moss jar": ("Decor", "Vases & Ornaments"),
+    "glass jar": ("Decor", "Vases & Ornaments"),
+    "hourglass": ("Decor", "Desk & Office"),
+    "bird-of-paradise": ("Decor", "Plants"),
+    "frozen sculpture": ("Decor", "Figurines & Models"),
+    "dessert carrier": ("Kitchen", "Kitchenware"),
+    "climbing wall": ("Toys", "Playground"),
+    "bingo wheel": ("Toys", "Game"),
+    "glowing-moss-jar shelves": ("Furniture", "Storage"),
+    "scarecrow": ("Outdoors", "Garden"),
+    "spooky scarecrow": ("Outdoors", "Garden"),
+    "game-show stand": ("Outdoors", "Garden"),
+    "plaza game stand": ("Outdoors", "Garden"),
+    "moss ball": ("Decor", "Plants"),
+    "wooden-block bookshelf": ("Furniture", "Storage"),
+    "wooden-block chest": ("Furniture", "Storage"),
+    "aloha-edition carrying case": ("Electronics", "Game Console"),
+    "antique console table": ("Furniture", "Table"),
+    "elegant console table": ("Furniture", "Table"),
+    "fan palm": ("Decor", "Plants"),
+    "fancy bathroom vanity": ("Furniture", "Vanity"),
+    "fancy lily wreath": ("Decor", "Wall Decor"),
+    "fancy mum wreath": ("Decor", "Wall Decor"),
+    "fancy rose wreath": ("Decor", "Wall Decor"),
+    "fancy violin": ("Decor", "Instruments"),
+    "windflower fan": ("Decor", "Wall Decor"),
+    "alto saxophone": ("Decor", "Instruments"),
+    "professional headphones": ("Electronics", "Audio"),
+    "vintage TV tray": ("Furniture", "Table"),
+    "small LED display": ("Electronics", "Screen"),
+    "magnetic knife rack": ("Kitchen", "Kitchenware"),
+    "office cabinet": ("Furniture", "Storage"),
+    "short file cabinet": ("Furniture", "Storage"),
+    "tall file cabinet": ("Furniture", "Storage"),
+    # Kitchen ware precision (bare "pot"/"pan"/"plate"/"cup" keywords are too
+    # greedy — they caught potato, panda, doorplate, cupcake)
+    "pot": ("Kitchen", "Cookware"),
+    "metal pot": ("Kitchen", "Cookware"),
+    "imperial pot": ("Kitchen", "Cookware"),
+    "aroma pot": ("Kitchen", "Cookware"),
+    "stewpot": ("Kitchen", "Cookware"),
+    "frying pan": ("Kitchen", "Cookware"),
+    "cup with saucer": ("Kitchen", "Cups"),
+    "toothbrush-and-cup set": ("Kitchen", "Cups"),
+    "decorative plate": ("Decor", "Wall Decor"),
+    "golden decorative plate": ("Decor", "Wall Decor"),
+    "golden dishes": ("Decor", "Wall Decor"),
+    "plate armor": ("Decor", "Armor & Weapons"),
+    "golden plate armor": ("Decor", "Armor & Weapons"),
+    "spaceship control panel": ("Electronics", "Screen"),
+    "dish-drying rack": ("Kitchen", "Kitchenware"),
+    "counter chair": ("Furniture", "Chair"),
+    "diner counter chair": ("Furniture", "Chair"),
+    "counter table": ("Furniture", "Table"),
+    "diner counter table": ("Furniture", "Table"),
+    "cute tea table": ("Furniture", "Table"),
+    "ranch tea table": ("Furniture", "Table"),
+    "donut stool": ("Furniture", "Stool"),
+    "kettle bathtub": ("Bathroom", "Bathroom"),
+    "kettlebell": ("Outdoors", "Fitness"),
+    "cement mixer": ("Toys", "Vehicle"),
+    "pet food bowl": ("Pets", "Pet"),
+    "bathroom sink": ("Bathroom", "Sink"),
+    "pitcher plant": ("Decor", "Plants"),
+    "coffee plant": ("Decor", "Plants"),
+    "potted starter plants": ("Decor", "Plants"),
+    "broom and dustpan": ("Bathroom", "Cleaning"),
+    "milk-glass lamp": ("Decor", "Lighting"),
+    "drinking fountain": ("Outdoors", "Garden"),
+    "fruit wreath": ("Decor", "Wall Decor"),
+    "mushroom wreath": ("Decor", "Wall Decor"),
+    "rice grasshopper model": ("Decor", "Figurines & Models"),
+    "cotton-candy stall": ("Outdoors", "Garden"),
+    "barbecue": ("Outdoors", "Garden"),
+    "carton beverage": ("Kitchen", "Drink"),
+    "cartoonist's set": ("Decor", "Art & Craft"),
+    "clackercart": ("Toys", "Vehicle"),
+    "plaza teacup ride": ("Toys", "Playground"),
+    "Famicom Disk System": ("Electronics", "Game Console"),
+    # Furniture precision (bare "table"/"safe"/"stand"/"box" keywords are greedy:
+    # inflatable, tablet, safety, nutcracker, music box...)
+    "inflatable bird ring": ("Outdoors", "Garden"),
+    "inflatable plaza toy": ("Outdoors", "Garden"),
+    "tablet device": ("Electronics", "Computer"),
+    "stone tablet": ("Outdoors", "Garden"),
+    "table lamp": ("Decor", "Lighting"),
+    "ornament table lamp": ("Decor", "Lighting"),
+    "rattan table lamp": ("Decor", "Lighting"),
+    "desk mirror": ("Decor", "Wall Decor"),
+    "wooden table mirror": ("Decor", "Wall Decor"),
+    "flower tabletop mirror": ("Decor", "Wall Decor"),
+    "desktop mic": ("Electronics", "Audio"),
+    "pet bed": ("Pets", "Pet"),
+    "kitty litter box": ("Pets", "Pet"),
+    "speed bag": ("Outdoors", "Fitness"),
+    "pull-up-bar stand": ("Outdoors", "Fitness"),
+    "wind turbine": ("Outdoors", "Garden"),
+    "tennis table": ("Outdoors", "Sports"),
+    "safety barrier": ("Outdoors", "Garden"),
+    "safety railing": ("Outdoors", "Garden"),
+    "nutcracker": ("Decor", "Figurines & Models"),
+    "music stand": ("Decor", "Instruments"),
+    "shell music box": ("Decor", "Instruments"),
+    "wooden music box": ("Decor", "Instruments"),
+    "pot rack": ("Kitchen", "Kitchenware"),
+    "Turkey Day garden stand": ("Outdoors", "Garden"),
+    "hedge standee": ("Outdoors", "Garden"),
+    "mountain standee": ("Outdoors", "Garden"),
+    # Decor precision (greedy keywords: board/tree/mic/grass/mat/urn...)
+    "Nook Inc. yoga mat": ("Outdoors", "Fitness"),
+    "yoga mat": ("Outdoors", "Fitness"),
+    "kadomatsu": ("Decor", "Seasonal"),
+    "matryoshka": ("Decor", "Figurines & Models"),
+    "office materials": ("Decor", "Desk & Office"),
+    "tomates al ajillo": ("Kitchen", "Food"),
+    "tomato puree": ("Kitchen", "Food"),
+    "colorful-lantern arch": ("Outdoors", "Garden"),
+    "lighthouse": ("Outdoors", "Garden"),
+    "neon tetra model": ("Decor", "Figurines & Models"),
+    "Famicom": ("Electronics", "Game Console"),
+    "Super Famicom": ("Electronics", "Game Console"),
+    "anatomical model": ("Decor", "Figurines & Models"),
+    "violin beetle model": ("Decor", "Figurines & Models"),
+    "grasshopper model": ("Decor", "Figurines & Models"),
+    "grasshopper-head model": ("Decor", "Figurines & Models"),
+    "eggplant cow": ("Decor", "Figurines & Models"),
+    "mum cushion": ("Decor", "Cushion"),
+    "flashy-flower sign": ("Decor", "Wall Decor"),
+    "grass standee": ("Outdoors", "Garden"),
+    "tree standee": ("Outdoors", "Garden"),
+    "street organ": ("Decor", "Instruments"),
+    "street piano": ("Decor", "Instruments"),
+    "tree's bounty lamp": ("Decor", "Lighting"),
+    "tree's bounty mobile": ("Decor", "Ceiling Decor"),
+    "tree's bounty arch": ("Outdoors", "Garden"),
+    "maple-leaf pond stone": ("Outdoors", "Garden"),
+    "tulip surprise box": ("Furniture", "Storage"),
+    "board game": ("Toys", "Game"),
+    "chessboard": ("Toys", "Game"),
+    "skateboard": ("Toys", "Toy"),
+    "skateboard wall rack": ("Furniture", "Storage"),
+    "surfboard": ("Outdoors", "Garden"),
+    "pedal board": ("Decor", "Instruments"),
+    "scoreboard": ("Outdoors", "Garden"),
+    "paper-chain ceiling garland": ("Decor", "Ceiling Decor"),
+    "hanging shelves": ("Furniture", "Storage"),
+    "hanging clothing rack": ("Furniture", "Storage"),
+    "iron wall rack": ("Furniture", "Storage"),
+    "dreamy wall rack": ("Furniture", "Storage"),
+    "simple wall shelf": ("Furniture", "Storage"),
+    "wall shelf with bottles": ("Furniture", "Storage"),
+    "wall-mounted bookshelf": ("Furniture", "Storage"),
+    "wall-mounted tool board": ("Furniture", "Storage"),
+    "Nordic lowboard": ("Furniture", "Storage"),
+    "ranch lowboard": ("Furniture", "Storage"),
+    "zen lowboard": ("Furniture", "Storage"),
+    "ironwood cupboard": ("Furniture", "Storage"),
+    "ranch cupboard": ("Furniture", "Storage"),
+    "cardboard box": ("Furniture", "Storage"),
+    "large cardboard boxes": ("Furniture", "Storage"),
+    "medium cardboard boxes": ("Furniture", "Storage"),
+    "small cardboard boxes": ("Furniture", "Storage"),
+    "pile of cardboard boxes": ("Furniture", "Storage"),
+    "gurney": ("Kitchen", "Kitchenware"),
+    "trophy case": ("Furniture", "Storage"),
+    "siphon": ("Kitchen", "Drink"),
+    "plaza balloon wagon": ("Outdoors", "Garden"),
+    "wedding welcome board": ("Decor", "Wall Decor"),
+    "parabolic antenna": ("Electronics", "Equipment"),
+    # Outdoors
+    "birdhouse": ("Outdoors", "Garden"),
+    "fire hydrant": ("Outdoors", "Garden"),
+    "birdbath": ("Outdoors", "Garden"),
+    "campsite sign": ("Outdoors", "Garden"),
+    "deer scare": ("Outdoors", "Garden"),
+    # Toys
+    "plaza train": ("Toys", "Vehicle"),
+    "gold-nugget mining car": ("Toys", "Vehicle"),
+    "pocket modern camper": ("Toys", "Vehicle"),
+    "pocket vintage camper": ("Toys", "Vehicle"),
+    # Appliances out of Bathroom
+    "automatic washer": ("Electronics", "Appliance"),
+    "deluxe washer": ("Electronics", "Appliance"),
+    "washing machine": ("Electronics", "Appliance"),
+    "dryer": ("Electronics", "Appliance"),
+    "vacuum cleaner": ("Electronics", "Appliance"),
+    "upright vacuum": ("Electronics", "Appliance"),
+    "vacuum": ("Electronics", "Appliance"),
+    "humidifier": ("Electronics", "Appliance"),
+})
+# New overrides above may carry original casing; normalize keys again.
+OVERRIDES = {k.lower(): v for k, v in OVERRIDES.items()}
 # (parent-path, {keyword: 3rd-level leaf}) — refines items whose 2nd level matches.
 THIRD = {
     ("Kitchen", "Appliance"): {
-        "fridge": "Fridge", "refrigerator": "Fridge", "freezer": "Freezer",
-        "stove": "Stove", "oven": "Oven", "microwave": "Microwave",
-        "toaster": "Toaster", "dishwasher": "Dishwasher", "mixer": "Mixer",
-        "blender": "Blender", "cooker": "Cooker", "rice cooker": "Rice Cooker",
         "espresso": "Espresso Machine", "coffee": "Coffee Machine", "juicer": "Juicer",
+        "rice cooker": "Rice Cooker", "blender": "Blender", "mixer": "Mixer",
+        "dishwasher": "Dishwasher", "toaster": "Toaster", "microwave": "Microwave",
+        "cooker": "Cooker", "freezer": "Freezer", "fridge": "Fridge",
+        "refrigerator": "Fridge", "oven": "Oven", "stove": "Stove",
     },
-    ("Decoration", "Instrument"): {
+    ("Decor", "Instruments"): {
         "guitar": "Guitar", "piano": "Piano", "drum": "Drums", "violin": "Violin",
         "clarinet": "Clarinet", "saxophone": "Saxophone", "trumpet": "Trumpet",
         "cello": "Cello", "harp": "Harp", "ukulele": "Ukulele", "sitar": "Sitar",

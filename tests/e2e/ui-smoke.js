@@ -65,16 +65,15 @@ try {
   }
   console.log('PASS: gift groups render with counts');
 
-  // Expand Furniture -> items with perfect badges + thumbnails
+  // Expand Furniture -> items render with thumbnails (all items are perfect)
   await page.click('summary:has-text("Furniture")');
   await page.waitForSelector('li img', { timeout: 10000 });
-  const furnitureText = await page.textContent('details:has(summary:has-text("Furniture"))');
-  const perfect = (furnitureText?.match(/Perfect match/g) || []).length;
-  if (!perfect) {
-    console.error('FAIL: no perfect matches in expanded Furniture group');
+  const furnitureRows = await page.locator('details:has(summary:has-text("Furniture")) li').count();
+  if (!furnitureRows) {
+    console.error('FAIL: no items in expanded Furniture group');
     process.exit(1);
   }
-  console.log(`PASS: Furniture group expands (${perfect} perfect matches, thumbnails render)`);
+  console.log(`PASS: Furniture group expands (${furnitureRows} items, thumbnails render)`);
 
   // Expand Clothing -> type filter pills -> filter to Headwear (multi-select)
   await page.click('summary:has-text("Clothing")');

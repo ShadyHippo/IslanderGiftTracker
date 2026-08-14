@@ -8,15 +8,10 @@ export interface GiftIdea {
   style: string;
   labelThemes: string;
   colors: string[];
-  /** 2 = perfect match (primary color + style, or furniture color), 1 = good. */
-  tier: number;
+  /** matched favorite primary colors. */
   colorMatch: string[];
-  /** color2-only matches (base/trim color) — never make an item "perfect". */
-  trimMatch: string[];
   /** matched favorite styles (clothing only). */
   styleMatch: string[];
-  /** chip label for color2 matches: "trim" (clothing) vs "secondary" (furniture). */
-  secondaryLabel: string;
   /** true when the item has a purchase price (not NFS/''). */
   buyable: boolean;
   /** Furniture: cataloged category path ('Kitchen/Appliance/Fridge'); clothing: ''. */
@@ -28,7 +23,6 @@ export interface GiftGroup {
   label: string;
   categories: string[];
   perfect: number;
-  good: number;
   items: GiftIdea[];
 }
 
@@ -68,7 +62,7 @@ export function giftIdeasByGroup(db: Database, villager: VillagerRow): GiftGroup
 
   const groups = new Map<string, GiftGroup>();
   for (const g of GIFT_GROUPS) {
-    groups.set(g.key, { ...g, perfect: 0, good: 0, items: [] });
+    groups.set(g.key, { ...g, perfect: 0, items: [] });
   }
 
   if (res.length) {
@@ -83,31 +77,14 @@ export function giftIdeasByGroup(db: Database, villager: VillagerRow): GiftGroup
         typeof style === 'string' && style ? style.split(';').map(norm) : [];
       const styleMatch = isClothing ? favStyles.filter((s) => itemStyles.includes(s)) : [];
 
-      // Clothing: primary color (color1) + favorite style = perfect; color2 is
-      // usually trim and can't claim "perfect". Furniture: any favorite color.
-      let tier = 0;
-      let primaryMatch: string[] = [];
-      let trimMatch: string[] = [];
-      if (isClothing) {
-        const c1 = norm(color1);
-        const c2 = norm(color2);
-        primaryMatch = favColors.includes(c1) ? [c1] : [];
-        trimMatch = favColors.includes(c2) && c1 !== c2 ? [c2] : [];
-        if (primaryMatch.length > 0 && styleMatch.length > 0) tier = 2;
-        else if (primaryMatch.length > 0 || trimMatch.length > 0 || styleMatch.length > 0) tier = 1;
-      // Furniture: primary color (color1) match = perfect; color2 is the
-      // base/trim (every kitchen scale is color2=White) and can't claim perfect.
-      } else {
-        const c1 = norm(color1);
-        const c2 = norm(color2);
-        primaryMatch = favColors.includes(c1) ? [c1] : [];
-        trimMatch = favColors.includes(c2) && c1 !== c2 ? [c2] : [];
-        if (primaryMatch.length > 0) tier = 2;
-        else if (trimMatch.length > 0) tier = 1;
+      // Perfect only. Clothing: primary color (color1) + favorite style.
+      // Furniture: primary color (color1). color2/base trims never count.
+      const c1 = norm(color1);
+      const colorMatch = favColors.includes(c1) ? [c1] : [];
+      if (isClothing ? !(colorMatch.length > 0 && styleMatch.length > 0) : colorMatch.length === 0) {
+        continue;
       }
-      if (tier === 0) continue;
-      if (tier === 2) group.perfect++;
-      else group.good++;
+      group.perfect++;
       group.items.push({
         name,
         variation: typeof variation === 'string' ? variation : '',
@@ -115,11 +92,8 @@ export function giftIdeasByGroup(db: Database, villager: VillagerRow): GiftGroup
         style: typeof style === 'string' ? style : '',
         labelThemes: typeof labelThemes === 'string' ? labelThemes : '',
         colors: [color1, color2].filter(Boolean).map(String),
-        tier,
-        colorMatch: primaryMatch,
-        trimMatch,
+        colorMatch,
         styleMatch,
-        secondaryLabel: isClothing ? 'trim' : 'secondary',
         buyable: typeof buy === 'string' && parseFloat(buy) > 0,
         typePath: typeof typePath === 'string' ? typePath : '',
       });
@@ -129,11 +103,10 @@ export function giftIdeasByGroup(db: Database, villager: VillagerRow): GiftGroup
   const out: GiftGroup[] = [];
   for (const g of groups.values()) {
     if (g.items.length === 0) continue;
-    // Trim: perfect matches only, deduped by item name (best variation wins —
-    // buyable over NFS), buyable first, then name.
+    // Deduped by item name (best variation wins — buyable over NFS),
+    // buyable first, then name.
     const best = new Map<string, GiftIdea>();
     for (const idea of g.items) {
-      if (idea.tier !== 2) continue;
       const key = idea.name.toLowerCase();
       const existing = best.get(key);
       if (!existing || (idea.buyable && !existing.buyable)) {
@@ -144,7 +117,6 @@ export function giftIdeasByGroup(db: Database, villager: VillagerRow): GiftGroup
       (a, b) => Number(b.buyable) - Number(a.buyable) || a.name.localeCompare(b.name),
     );
     g.perfect = g.items.length;
-    g.good = 0;
     out.push(g);
   }
   return out;
@@ -160,7 +132,6 @@ export function curatedPicks(groups: GiftGroup[], limit = 10): GiftIdea[] {
   for (const g of groups) {
     const best = new Map<string, GiftIdea>();
     for (const idea of g.items) {
-      if (idea.tier !== 2) continue;
       const key = idea.name.toLowerCase();
       const existing = best.get(key);
       if (!existing || (idea.buyable && !existing.buyable)) {

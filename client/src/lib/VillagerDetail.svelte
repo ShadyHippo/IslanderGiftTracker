@@ -259,8 +259,7 @@
                 <span class="flex items-baseline gap-2">
                   <span class="font-semibold text-green-900">{group.label}</span>
                   <span class="text-xs text-green-600">
-                    {fmt(group.perfect)} perfect
-                    {#if group.good}· {fmt(group.good)} more{/if}
+                    {fmt(group.perfect)}
                   </span>
                 </span>
                 <span class="text-green-400 transition-transform group-open:rotate-90">›</span>
@@ -303,19 +302,9 @@
                         <span class="shrink-0 text-xs text-green-600">{idea.category}</span>
                       </div>
                       <div class="mt-1 flex flex-wrap gap-1">
-                        {#if idea.tier === 2}
-                          <span class="rounded-full bg-green-700 px-2 py-0.5 text-xs font-semibold text-white">
-                            ★ Perfect match
-                          </span>
-                        {/if}
                         {#each idea.colorMatch as c}
                           <span class="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-800">
                             ♥ {c}
-                          </span>
-                        {/each}
-                        {#each idea.trimMatch as c}
-                          <span class="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">
-                            ♥ {c} ({idea.secondaryLabel})
                           </span>
                         {/each}
                         {#each idea.styleMatch as s}

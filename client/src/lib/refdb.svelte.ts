@@ -10,7 +10,7 @@ interface RefManifestEntry {
 
 interface RefManifest {
   latest: number;
-  references: RefManifestEntry[];
+  references: RefManifestEntry[] | null;
 }
 
 export type RefDbStatus = 'idle' | 'downloading' | 'initializing' | 'ready' | 'error';
@@ -123,8 +123,10 @@ export async function loadReferenceDb(): Promise<void> {
   state.error = null;
   try {
     const manifest = await fetchManifest();
-    const entry = manifest.references.find((r) => r.version === manifest.latest);
-    if (!entry) throw new Error(`no reference db entry for version ${manifest.latest}`);
+    const entry = manifest.references?.find((r) => r.version === manifest.latest);
+    if (!entry) {
+      throw new Error('Reference data isn\u2019t available yet \u2014 try again in a moment.');
+    }
 
     const cached = await idbGet();
     let gz: ArrayBuffer;

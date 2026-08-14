@@ -53,17 +53,119 @@ try {
   await page.screenshot({ path: '/e2e/detail.png', fullPage: false });
   console.log('PASS: villager detail page renders at a deep-linkable URL');
 
-  // Gift ideas section renders with matched items
+  // Gift ideas: collapsible groups with counts
   await page.waitForSelector('section:has-text("Gift ideas")', { timeout: 5000 });
-  const giftSection = await page.textContent('section:has-text("Gift ideas")');
-  const perfectMatches = (giftSection?.match(/Perfect match/g) || []).length;
-  const ideas = (giftSection?.match(/♥/g) || []).length;
-  console.log(`gift ideas: ${ideas} color matches, ${perfectMatches} perfect matches`);
-  if (!perfectMatches || !ideas) {
-    console.error('FAIL: gift ideas section empty or no matches');
+  const groupSummaries = await page.$$eval('summary', (els) => els.map((e) => e.textContent?.trim() ?? ''));
+  console.log('group summaries:', groupSummaries.slice(0, 4));
+  const hasFurniture = groupSummaries.some((s) => s.includes('Furniture'));
+  const hasClothing = groupSummaries.some((s) => s.includes('Clothing'));
+  if (!hasFurniture || !hasClothing) {
+    console.error('FAIL: expected Furniture + Clothing groups');
     process.exit(1);
   }
-  console.log('PASS: gift ideas render with color/style matches');
+  console.log('PASS: gift groups render with counts');
+
+  // Expand Furniture -> items with perfect badges + thumbnails
+  await page.click('summary:has-text("Furniture")');
+  await page.waitForSelector('li img', { timeout: 10000 });
+  const furnitureText = await page.textContent('details:has(summary:has-text("Furniture"))');
+  const perfect = (furnitureText?.match(/Perfect match/g) || []).length;
+  if (!perfect) {
+    console.error('FAIL: no perfect matches in expanded Furniture group');
+    process.exit(1);
+  }
+  console.log(`PASS: Furniture group expands (${perfect} perfect matches, thumbnails render)`);
+
+  // Expand Clothing -> type filter pills -> filter to Headwear (multi-select)
+  await page.click('summary:has-text("Clothing")');
+  await page.waitForSelector('details:has(summary:has-text("Clothing")) button:has-text("Headwear")', { timeout: 5000 });
+  await page.click('details:has(summary:has-text("Clothing")) button:has-text("Headwear")');
+  await page.waitForTimeout(300);
+  const headwearRows = await page.$$eval(
+    'details:has(summary:has-text("Clothing")) li',
+    (els) => els.map((e) => e.textContent?.trim() ?? ''),
+  );
+  console.log(`headwear filter: ${headwearRows.length} visible rows`);
+  if (headwearRows.length === 0 || headwearRows.some((t) => !t.includes('Headwear'))) {
+    console.error('FAIL: Headwear filter shows non-Headwear rows or nothing');
+    process.exit(1);
+  }
+  console.log('PASS: clothing type filter works');
+
+  // Furniture type pills: select filters, deselect restores, drill + breadcrumb
+  const furn = page.locator('details:has(summary:has-text("Furniture"))');
+  if ((await furn.locator('.type-pills').count()) === 0) {
+    console.error('FAIL: Furniture type pills not rendered on expand');
+    process.exit(1);
+  }
+  const rowCount = async () => furn.locator('li').count();
+  const full = await rowCount();
+  const firstMain = furn.locator('.pill-main').first();
+  const pillText = ((await firstMain.textContent()) ?? '').trim();
+  await firstMain.click();
+  await page.waitForTimeout(300);
+  const selected = await rowCount();
+  if (selected > full) {
+    console.error('FAIL: selecting a type pill increased the row count');
+    process.exit(1);
+  }
+  await firstMain.click();
+  await page.waitForTimeout(300);
+  const restored = await rowCount();
+  if (restored !== full) {
+    console.error(`FAIL: deselecting did not restore rows (${restored} != ${full})`);
+    process.exit(1);
+  }
+  console.log(`PASS: furniture type pills filter (${pillText}: ${full} -> ${selected} -> ${restored})`);
+
+  // Drill into a type -> breadcrumb appears; All returns to root
+  await firstMain.click();
+  const drill = furn.locator('.pill-drill').first();
+  if ((await drill.count()) > 0) {
+    await drill.click();
+    await page.waitForSelector('details:has(summary:has-text("Furniture")) .pill-crumbs', { timeout: 5000 });
+    const crumbs = ((await furn.locator('.pill-crumbs').textContent()) ?? '').trim();
+    if (!crumbs.startsWith('All')) {
+      console.error(`FAIL: breadcrumb does not start with All (${crumbs})`);
+      process.exit(1);
+    }
+    await furn.locator('.pill-crumbs button').first().click();
+    await page.waitForTimeout(200);
+    console.log(`PASS: furniture pill drill + breadcrumb (${crumbs})`);
+  } else {
+    console.log('SKIP: no furniture pill with children to drill into');
+  }
+  await firstMain.click(); // deselect back to full list
+
+  // Buyable pill: AND filter, toggles back
+  const buyableBtn = furn.locator('button:text-is("Buyable only")');
+  await buyableBtn.click();
+  await page.waitForTimeout(300);
+  const buyableRows = await rowCount();
+  if (buyableRows > full) {
+    console.error('FAIL: Buyable filter increased rows');
+    process.exit(1);
+  }
+  await buyableBtn.click();
+  await page.waitForTimeout(300);
+  if ((await rowCount()) !== full) {
+    console.error('FAIL: Buyable off did not restore rows');
+    process.exit(1);
+  }
+  console.log(`PASS: buyable pill filters (${full} -> ${buyableRows})`);
+
+  // Irrelevant expander nests the rest (Surfaces, Music, ...)
+  await page.click('summary:has-text("Irrelevant")');
+  await page.waitForSelector('summary:has-text("Surfaces")', { timeout: 5000 });
+  await page.click('summary:has-text("Surfaces")');
+  await page.waitForSelector('details:has(summary:has-text("Surfaces")) li', { timeout: 5000 });
+  const surfRows = await page.$$eval('details:has(summary:has-text("Surfaces")) li', (els) => els.length);
+  console.log(`Irrelevant -> Surfaces: ${surfRows} rows`);
+  if (!surfRows) {
+    console.error('FAIL: Irrelevant expander did not reveal nested groups');
+    process.exit(1);
+  }
+  console.log('PASS: Irrelevant expander nests the other groups');
 
   // Their house strip renders
   await page.waitForSelector('section:has-text("Their house")', { timeout: 5000 });

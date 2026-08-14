@@ -32,6 +32,9 @@ XLSX = os.path.join(ROOT, "res", "Data Spreadsheet for Animal Crossing New Horiz
 OUT_DB = os.path.join(ROOT, "reference.db")
 OUT_GZ = os.path.join(ROOT, "reference.v1.db.gz")
 CACHE_DIR = os.path.join(ROOT, "cache")
+IMAGES_RAW = os.path.join(ROOT, "images", "raw")
+IMAGES_THUMB = os.path.join(ROOT, "images", "thumb")
+thumb = 0
 MISSED_LOG = os.path.join(ROOT, "images-missed.txt")
 DB_VERSION = 1
 
@@ -73,9 +76,29 @@ def downscale_png(data, px):
         fin.flush()
         r = subprocess.run(["convert", fin.name, "-resize", f"{px}x{px}>",
                             "-strip", fout.name], capture_output=True)
-        if r.returncode == 0:
-            with open(fout.name, "rb") as f:
+        if r.returncode != 0:
+            return data
+        with open(fout.name, "rb") as f:
+            return f.read()
+
+
+def maybe_thumb(fn, data):
+    """Downscale with a disk cache (cache/thumb{px}/{fn}): repeated rebuilds
+    of the same images skip ImageMagick entirely."""
+    if not thumb:
+        return data
+    for d in (IMAGES_THUMB, os.path.join(CACHE_DIR, f"thumb{thumb}")):
+        p = os.path.join(d, fn)
+        if os.path.exists(p):
+            with open(p, "rb") as f:
                 return f.read()
+    p = os.path.join(IMAGES_THUMB, fn)
+    t = downscale_png(data, thumb)
+    if t:
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, "wb") as f:
+            f.write(t)
+    return t
     return data
 
 
@@ -260,7 +283,7 @@ def wiki_allimages(title):
 # ---------------------------------------------------------------- build
 
 def main():
-    global OUT_DB, OUT_GZ
+    global OUT_DB, OUT_GZ, thumb
     args = sys.argv[1:]
     limit = None
     no_images = "--no-images" in args
@@ -283,9 +306,14 @@ def main():
     z, sheets = load_workbook()
     z.close()
 
-    if os.path.exists(OUT_DB):
-        os.remove(OUT_DB)
-    db = sqlite3.connect(OUT_DB)
+    # Build atomically: write to .tmp files and rename into place only at the
+    # very end, so a crash or a running rebuild never leaves a half-written
+    # reference db (and never blanks the served .gz that clients are using).
+    out_db_tmp = OUT_DB + ".tmp"
+    out_gz_tmp = OUT_GZ + ".tmp"
+    if os.path.exists(out_db_tmp):
+        os.remove(out_db_tmp)
+    db = sqlite3.connect(out_db_tmp)
     db.execute("PRAGMA journal_mode=OFF")
     db.execute("PRAGMA synchronous=OFF")
 
@@ -294,7 +322,8 @@ def main():
     db.execute("INSERT INTO meta VALUES ('schema_version', ?), ('build_date', ?)",
                (str(DB_VERSION), __import__("datetime").date.today().isoformat()))
     db.execute("CREATE TABLE items (name TEXT, category TEXT, variation TEXT, style TEXT,"
-               " color1 TEXT, color2 TEXT, buy TEXT, sell TEXT, source TEXT, label_themes TEXT)")
+               " color1 TEXT, color2 TEXT, buy TEXT, sell TEXT, source TEXT, label_themes TEXT,"
+               " type_path TEXT)")
     db.execute("CREATE TABLE images (category TEXT, name TEXT, variation TEXT, data BLOB,"
                " url TEXT, PRIMARY KEY (category, name, variation))")
 
@@ -326,21 +355,26 @@ def main():
             return row[i] if i is not None and i < len(row) else ''
         # Clothing sheets carry 'Style 1'/'Style 2' (not 'Style'); merge into one
         # column so the client matcher can compare against villager styles.
+        # Furniture sheets carry a cataloged type path (e.g. 'Kitchen/Appliance/Fridge');
+        # see scripts/furniture_types.py — regenerated every build.
+        from furniture_types import classify, FURNITURE_CATEGORIES
         for row in rows[1:]:
             if not row or not row[idx.get("Name", 0) if "Name" in idx else 0]:
                 continue
             style = '; '.join(x for x in (g(row, 'Style 1'), g(row, 'Style 2')) if x) or g(row, 'Style')
-            db.execute("INSERT INTO items VALUES (?,?,?,?,?,?,?,?,?,?)",
+            tpath = '/'.join(classify(g(row, "Name"))) if sheet_name in FURNITURE_CATEGORIES else ''
+            db.execute("INSERT INTO items VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                        (g(row, "Name"), sheet_name, g(row, "Variation"), style,
                         g(row, "Color 1"), g(row, "Color 2"), g(row, "Buy"),
-                        g(row, "Sell"), g(row, "Source"), g(row, "Label Themes")))
+                        g(row, "Sell"), g(row, "Source"), g(row, "Label Themes"), tpath))
             n_items += 1
     print(f"    items: {n_items} rows")
 
     # images
     if not no_images:
         print("[3/4] fetching images ...")
-        os.makedirs(CACHE_DIR, exist_ok=True)
+        for d in (CACHE_DIR, IMAGES_RAW, IMAGES_THUMB):
+            os.makedirs(d, exist_ok=True)
         # cached bytes are read lazily per filename in one() via get_cache_bytes
         tasks = []
         for sheet_name, rows in sheets.items():
@@ -369,10 +403,11 @@ def main():
                      if seen_cat.setdefault(t[0], 0) < limit and not seen_cat.__setitem__(t[0], seen_cat[t[0]] + 1)]
 
         def get_cache_bytes(fn):
-            p = os.path.join(CACHE_DIR, fn)
-            if os.path.exists(p):
-                with open(p, "rb") as f:
-                    return f.read()
+            for d in (IMAGES_RAW, CACHE_DIR):
+                p = os.path.join(d, fn)
+                if os.path.exists(p):
+                    with open(p, "rb") as f:
+                        return f.read()
             return None
 
         stats = {s: [0, 0] for s, _, _ in tasks}  # hits, total
@@ -396,8 +431,8 @@ def main():
                         if data:
                             with open(os.path.join(CACHE_DIR, fn), "wb") as f:
                                 f.write(data)
-                    if data and thumb:
-                        data = downscale_png(data, thumb)
+                    if data:
+                        data = maybe_thumb(fn, data)
                     if data:
                         return cat, name, var, fn, data
             if vpats:
@@ -406,15 +441,15 @@ def main():
                     for pat in vpats:
                         fn = pat.format(n=base, v=v)
                         data = get_cache_bytes(fn)
-                    if data is None:
-                        data = try_fetch(fn)
+                        if data is None:
+                            data = try_fetch(fn)
+                            if data:
+                                with open(os.path.join(IMAGES_RAW, fn), "wb") as f:
+                                    f.write(data)
                         if data:
-                            with open(os.path.join(CACHE_DIR, fn), "wb") as f:
-                                f.write(data)
-                    if data and thumb:
-                        data = downscale_png(data, thumb)
-                    if data:
-                        return cat, name, var, fn, data
+                            data = maybe_thumb(fn, data)
+                        if data:
+                            return cat, name, var, fn, data
             data = (wiki_allimages(name) or wiki_pageimages(name) or wiki_gallery(name))
             if data:
                 if isinstance(data, str):  # url from pageimages
@@ -422,9 +457,12 @@ def main():
                         data = http_get(data)
                     except Exception:
                         return cat, name, var, None, None
-                if thumb:
-                    data = downscale_png(data, thumb)
-                return cat, name, var, "wiki", data
+                if data:
+                    wfn = f"wiki_{name}_{var}".replace(' ', '_') + ".png"
+                    with open(os.path.join(IMAGES_RAW, wfn), "wb") as f:
+                        f.write(data)
+                    data = maybe_thumb(wfn, data)
+                return cat, name, var, wfn, data
             return cat, name, var, None, None
 
         with ThreadPoolExecutor(max_workers=16) as pool:
@@ -455,11 +493,14 @@ def main():
     print(f"[4/4] writing db + gz ...")
     db.commit()
     db.close()
-    raw = os.path.getsize(OUT_DB)
-    with open(OUT_DB, "rb") as fin, gzip.open(OUT_GZ, "wb", compresslevel=9) as fout:
+    raw = os.path.getsize(out_db_tmp)
+    with open(out_db_tmp, "rb") as fin, gzip.open(out_gz_tmp, "wb", compresslevel=9) as fout:
         import shutil
         shutil.copyfileobj(fin, fout)
-    gz = os.path.getsize(OUT_GZ)
+    gz = os.path.getsize(out_gz_tmp)
+    # Atomic swap: the served files are replaced only once both are complete.
+    os.replace(out_db_tmp, OUT_DB)
+    os.replace(out_gz_tmp, OUT_GZ)
     print(f"\nDone.")
     print(f"  reference.db       : {raw/1e6:.1f} MB")
     print(f"  reference.v1.db.gz : {gz/1e6:.1f} MB")

@@ -52,6 +52,9 @@ func (s *server) referenceEntries() ([]refEntry, error) {
 		out = append(out, refEntry{Version: version, File: name, Size: st.Size(), SHA256: s.fileHash(m, st)})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Version > out[j].Version })
+	if out == nil {
+		out = []refEntry{} // JSON: [] not null (no reference files yet)
+	}
 	return out, nil
 }
 

@@ -28,3 +28,6 @@ __pycache__/
 # --- Agent tooling (machine-local, not project source) ---
 .maki/
 cont_maki.sh
+images/
+reference.db.tmp
+reference.v*.db.gz.tmp

@@ -15,8 +15,10 @@ Usage:
 """
 import gzip
 import hashlib
+import html as _html
 import json
 import os
+import re
 import sqlite3
 import sys
 import urllib.error
@@ -280,6 +282,179 @@ def wiki_allimages(title):
     return None
 
 
+# ---------------------------------------------------------------- house data
+# Per-villager house furniture + colors come from Nookipedia's nh_house Cargo
+# table (https://nookipedia.com/wiki/Nookipedia:Cargo_tables). Each villager
+# row stores the house items as JSON; the image filename encodes the exact
+# variation ("Tea_Set_(Red_-_Red)_NH_Icon.png"), which we resolve against the
+# xlsx items table to get the *specific* colors of that villager's house.
+
+NH_HOUSE_CACHE = os.path.join(CACHE_DIR, "nh_house.json")
+HOUSE_IMG_CACHE = os.path.join(CACHE_DIR, "house")
+
+def fetch_nh_house():
+    """Cargo query for all villager house rows (name_sort + items JSON + photos).
+    Cached to cache/nh_house.json so rebuilds skip the network call."""
+    if os.path.exists(NH_HOUSE_CACHE):
+        with open(NH_HOUSE_CACHE) as f:
+            return json.load(f)
+    q = {"action": "cargoquery", "tables": "nh_house", "format": "json", "limit": "500",
+         "fields": "name_sort,items,interior_image_url,exterior_image_url"}
+    url = "https://nookipedia.com/w/api.php?" + urllib.parse.urlencode(q)
+    d = json.loads(http_get(url, timeout=30).decode())
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    with open(NH_HOUSE_CACHE, "w") as f:
+        json.dump(d, f)
+    return d
+
+
+def house_variation_from_url(url):
+    """Extract the exact variation from a Nookipedia item image URL:
+    '.../Tea_Set_%28Red_-_Red%29_NH_Icon.png' -> 'Red - Red'
+    '.../Cute_Sofa_NH_Icon.png' -> '' (base). Takes the LAST parenthesized
+    group so sizes like '(50 in.)' before the color are ignored."""
+    if not url:
+        return ''
+    fn = urllib.parse.unquote(url.split('/')[-1])
+    groups = re.findall(r'\(([^)]+)\)', fn)
+    if not groups:
+        return ''
+    return groups[-1].replace('_', ' ').strip()
+
+
+def build_variant_lookup(sheets):
+    """norm_name -> list of {var, pat, vid, c1, c2, name} from the xlsx sheets."""
+    norm = lambda s: re.sub(r'[\s-]+', ' ', str(s).strip().lower())
+    out = {}
+    for sheet_name, rows in sheets.items():
+        header = rows[0]
+        idx = {h: i for i, h in enumerate(header) if h}
+        if not {"Name", "Color 1", "Color 2"}.issubset(idx):
+            continue
+        def g(row, col):
+            i = idx.get(col)
+            return row[i] if i is not None and i < len(row) else ''
+        for row in rows[1:]:
+            nm = norm(g(row, "Name"))
+            if not nm:
+                continue
+            out.setdefault(nm, []).append({
+                "var": norm(g(row, "Variation")),
+                "pat": norm(g(row, "Pattern")),
+                "vid": str(g(row, "Variant ID") or '').strip(),
+                "c1": g(row, "Color 1"), "c2": g(row, "Color 2"),
+                "name": g(row, "Name"), "category": sheet_name,
+            })
+    return out
+
+
+def resolve_house_variant(opts, variation):
+    """Map a Nookipedia variation string to the exact xlsx variant row.
+    variation == '' means the item's base variant (Variant ID 0_*)."""
+    if not opts:
+        return None
+    v = variation.strip().lower()
+    if not v:
+        for o in opts:
+            if o["vid"].startswith("0_") and o["pat"] in ("", "na"):
+                return o
+        for o in opts:
+            if o["vid"].startswith("0_"):
+                return o
+        for o in opts:
+            if o["pat"] in ("", "na"):
+                return o
+        return opts[0]
+    # "Body - Pattern" (e.g. 'Red - Red'): split first, then normalize each part
+    # (normalizing first would collapse the separator into a space).
+    if ' - ' in v:
+        body, pat = v.split(' - ', 1)
+        body = re.sub(r'[\s-]+', ' ', body)
+        pat = re.sub(r'[\s-]+', ' ', pat)
+        for o in opts:
+            if o["var"] == body and o["pat"] == pat:
+                return o
+    vn = re.sub(r'[\s-]+', ' ', v)
+    for o in opts:
+        if o["var"] == vn and o["pat"] in ("", "na"):
+            return o
+    for o in opts:
+        if o["pat"] == vn:
+            return o
+    for o in opts:
+        if o["var"] == vn:
+            return o
+    return opts[0]
+
+
+def cached_house_image(url, key):
+    """Fetch a full-quality house photo (interior/exterior), disk-cached by key."""
+    os.makedirs(HOUSE_IMG_CACHE, exist_ok=True)
+    p = os.path.join(HOUSE_IMG_CACHE, key)
+    if os.path.exists(p):
+        with open(p, "rb") as f:
+            return f.read()
+    data = http_get(url, timeout=30)
+    if data:
+        with open(p, "wb") as f:
+            f.write(data)
+    return data
+
+
+def build_house_data(db, sheets, no_images):
+    """Create + fill house_items (exact variant colors) and house_images
+    (interior/exterior photos, full quality). Skips gracefully on network errors."""
+    print("[2c/4] house data (Nookipedia nh_house) ...")
+    db.execute("CREATE TABLE house_items (villager TEXT, name TEXT, category TEXT,"
+               " color1 TEXT, color2 TEXT)")
+    db.execute("CREATE TABLE house_images (villager TEXT, kind TEXT, data BLOB,"
+               " PRIMARY KEY (villager, kind))")
+    try:
+        cargo = fetch_nh_house()
+    except Exception as e:
+        print(f"    WARN: nh_house fetch failed ({e}); house section will fall back")
+        return
+    lookup = build_variant_lookup(sheets)
+    rows = cargo.get("cargoquery", [])
+    n_items = 0
+    n_villagers = 0
+    for r in rows:
+        t = r.get("title", {})
+        villager = t.get("name_sort", "")
+        if not villager:
+            continue
+        try:
+            items = json.loads(_html.unescape(t.get("items") or ""))
+        except (ValueError, TypeError):
+            items = []
+        for it in items:
+            nm = it.get("name", "")
+            var = house_variation_from_url(it.get("image_url", ""))
+            norm = re.sub(r'[\s-]+', ' ', nm.strip().lower())
+            hit = resolve_house_variant(lookup.get(norm), var)
+            if not hit:
+                continue
+            db.execute("INSERT INTO house_items VALUES (?,?,?,?,?)",
+                       (villager, hit["name"], hit["category"], hit["c1"], hit["c2"]))
+            n_items += 1
+        if not no_images:
+            for kind, field in (("interior", "interior_image_url"),
+                                ("exterior", "exterior_image_url")):
+                url = t.get(field)
+                if not url:
+                    continue
+                key = f"{villager.replace(' ', '_')}_{kind}.img"
+                try:
+                    data = cached_house_image(url, key)
+                except Exception:
+                    continue
+                if data:
+                    db.execute("INSERT OR REPLACE INTO house_images VALUES (?,?,?)",
+                               (villager, kind, sqlite3.Binary(data)))
+        n_villagers += 1
+    print(f"    {n_villagers} villagers, {n_items} house items resolved")
+
+
 # ---------------------------------------------------------------- build
 
 def main():
@@ -369,6 +544,9 @@ def main():
                         g(row, "Sell"), g(row, "Source"), g(row, "Label Themes"), tpath))
             n_items += 1
     print(f"    items: {n_items} rows")
+
+    # per-villager house data (exact furniture colors + interior/exterior photos)
+    build_house_data(db, sheets, no_images)
 
     # images
     if not no_images:

@@ -112,7 +112,7 @@ async function gunzip(bytes: ArrayBuffer): Promise<ArrayBuffer> {
 
 let sqlPromise: Promise<SqlJsStatic> | null = null;
 
-function initSql(): Promise<SqlJsStatic> {
+export function initSql(): Promise<SqlJsStatic> {
   sqlPromise ??= initSqlJs({ locateFile: () => sqlWasmUrl });
   return sqlPromise;
 }

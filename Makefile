@@ -46,9 +46,18 @@ client-dev: client-dirs
 docker:
 	docker build -t acnh-server server/deploy
 
+# Categories that need images: everything the gift matcher shows + villager
+# icons. Pass explicitly — the default (all sheets) balloons the db to 253 MB.
+REF_CATEGORIES = Accessories,Artwork,Bags,Bottoms,Ceiling Decor,Clothing Other,Dress-Up,Fencing,Fish,Floors,Fossils,Gyroids,Headwear,Housewares,Insects,Interior Structures,Miscellaneous,Music,Other,Rugs,Sea Creatures,Shoes,Socks,ToolsGoods,Tops,Umbrellas,Villagers,Wall-mounted,Wallpaper
+
 # --- Local full-stack app (docker-compose.dev.yml) ---
 dev-ref:
-	mkdir -p dev-data/ref && python3 scripts/build_db.py --thumb 128 --categories villagers --out-dir dev-data/ref
+	mkdir -p dev-data/ref && python3 scripts/build_db.py --thumb 128 --categories "$(REF_CATEGORIES)" --out-dir dev-data/ref
+
+# Production reference db — drop reference.vN.db.gz into server/deploy/ref and
+# docker compose bind-mounts it read-only (see server/deploy/docker-compose.yml).
+deploy-ref:
+	mkdir -p server/deploy/ref && python3 scripts/build_db.py --thumb 128 --categories "$(REF_CATEGORIES)" --out-dir server/deploy/ref
 
 app-up:
 	docker compose -f docker-compose.dev.yml up -d --build

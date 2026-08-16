@@ -8,6 +8,7 @@ build.log
 # --- Server runtime data: secrets + user data, never commit ---
 server/data/
 server/bin/
+server/deploy/ref/
 dev-data/
 
 # --- Client build ---

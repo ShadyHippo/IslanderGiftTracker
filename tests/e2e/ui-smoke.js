@@ -8,6 +8,21 @@ const pass = process.env.E2E_PASS || 'devpass';
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 390, height: 844 } }); // iPhone-ish
 
+// Autosave status indicator (passive pill in App.svelte): 'Unsaved changes'
+// while debouncing, then 'Saved hh:mm:ss' after the upload completes.
+const waitDirty = () =>
+  page.waitForFunction(
+    () => document.querySelector('[data-save-status]')?.textContent?.trim() === 'Unsaved changes',
+    null,
+    { timeout: 5000 },
+  );
+const waitSaved = () =>
+  page.waitForFunction(
+    () => document.querySelector('[data-save-status]')?.textContent?.trim().startsWith('Saved '),
+    null,
+    { timeout: 15000 },
+  );
+
 try {
   const resp = await page.goto(base, { waitUntil: 'domcontentloaded', timeout: 30000 });
   if (!resp || resp.status() !== 200) {
@@ -36,6 +51,62 @@ try {
     process.exit(1);
   }
   console.log('PASS: villager icons render');
+
+  // Villager flags: favorite + on-island toggles, list filters, and the filters
+  // clear the search text (so the narrowed list is immediately visible)
+  const favBtn = page.locator('button[aria-label="Toggle favorite for Ace"]');
+  const islandBtn = page.locator('button[aria-label="Toggle on-island for Ace"]');
+  const favBefore = (await favBtn.getAttribute('aria-pressed')) === 'true';
+  const islandBefore = (await islandBtn.getAttribute('aria-pressed')) === 'true';
+
+  // Favorite Ace -> Favorites filter narrows the list AND clears the search
+  await page.fill('input[placeholder^="Search by name"]', 'ace');
+  await page.waitForTimeout(200);
+  await favBtn.click();
+  await page.waitForFunction(
+    () =>
+      document.querySelector('button[aria-label="Toggle favorite for Ace"]')?.getAttribute('aria-pressed') === 'true',
+    null,
+    { timeout: 5000 },
+  );
+  await page.click('button:has-text("Favorites")');
+  await page.waitForTimeout(200);
+  const searchAfterFilter = await page.inputValue('input[placeholder^="Search by name"]');
+  if (searchAfterFilter !== '') {
+    console.error(`FAIL: toggling a filter should clear the search text, got "${searchAfterFilter}"`);
+    process.exit(1);
+  }
+  const favRows = await page.locator('ul li').allTextContents();
+  if (favRows.length === 0 || !favRows.some((t) => t.includes('Ace'))) {
+    console.error(`FAIL: Favorites filter should include Ace, got ${favRows.length} rows`);
+    process.exit(1);
+  }
+  await page.click('button:has-text("Favorites")');
+  await page.waitForTimeout(200);
+
+  // On-island Ace -> same filter for islanders
+  await islandBtn.click();
+  await page.waitForFunction(
+    () =>
+      document.querySelector('button[aria-label="Toggle on-island for Ace"]')?.getAttribute('aria-pressed') === 'true',
+    null,
+    { timeout: 5000 },
+  );
+  await page.click('button:has-text("On my island")');
+  await page.waitForTimeout(200);
+  const islandRows = await page.locator('ul li').allTextContents();
+  if (islandRows.length === 0 || !islandRows.some((t) => t.includes('Ace'))) {
+    console.error(`FAIL: On my island filter should include Ace, got ${islandRows.length} rows`);
+    process.exit(1);
+  }
+  await page.click('button:has-text("On my island")');
+  await page.waitForTimeout(200);
+
+  // Restore original flag state; autosave uploads it (and cleans up the row)
+  if (!favBefore) await favBtn.click();
+  if (!islandBefore) await islandBtn.click();
+  await waitSaved();
+  console.log('PASS: villager favorite + on-island toggles, filters, and search-clear');
 
   // Search narrows the list
   await page.fill('input[placeholder^="Search by name"]', 'ankha');
@@ -75,121 +146,76 @@ try {
   }
   console.log(`PASS: Furniture group expands (${furnitureRows} items, thumbnails render)`);
 
-  // Expand Clothing -> type filter pills -> filter to Headwear (multi-select)
-  await page.click('summary:has-text("Clothing")');
-  await page.waitForSelector('details:has(summary:has-text("Clothing")) button:has-text("Headwear")', { timeout: 5000 });
-  await page.click('details:has(summary:has-text("Clothing")) button:has-text("Headwear")');
-  await page.waitForTimeout(300);
-  const headwearRows = await page.$$eval(
-    'details:has(summary:has-text("Clothing")) li',
-    (els) => els.map((e) => e.textContent?.trim() ?? ''),
-  );
-  console.log(`headwear filter: ${headwearRows.length} visible rows`);
-  if (headwearRows.length === 0 || headwearRows.some((t) => !t.includes('Headwear'))) {
-    console.error('FAIL: Headwear filter shows non-Headwear rows or nothing');
-    process.exit(1);
-  }
-  console.log('PASS: clothing type filter works');
-
-  // Furniture type pills: select filters, deselect restores, drill + breadcrumb
+  // Gift ideas search: matches names across the group, restores when cleared
   const furn = page.locator('details:has(summary:has-text("Furniture"))');
-  if ((await furn.locator('.type-pills').count()) === 0) {
-    console.error('FAIL: Furniture type pills not rendered on expand');
+  const full = await furn.locator('li').count();
+  const firstItemName = (((await furn.locator('li p.font-medium').first().textContent()) ?? '').trim().split(' (')[0]).trim();
+  if (!firstItemName) {
+    console.error('FAIL: could not read the first furniture item name');
     process.exit(1);
   }
-  const rowCount = async () => furn.locator('li').count();
-  const full = await rowCount();
-  const firstMain = furn.locator('.pill-main').first();
-  const pillText = ((await firstMain.textContent()) ?? '').trim();
-  await firstMain.click();
+  const giftSearch = page.locator('input[placeholder^="Search gifts"]');
+  await giftSearch.fill(firstItemName);
   await page.waitForTimeout(300);
-  const selected = await rowCount();
-  if (selected > full) {
-    console.error('FAIL: selecting a type pill increased the row count');
+  const searchRows = await furn.locator('li').allTextContents();
+  if (searchRows.length === 0 || searchRows.some((t) => !t.includes(firstItemName))) {
+    console.error(`FAIL: gift search shows non-matching rows or nothing for "${firstItemName}"`);
     process.exit(1);
   }
-  await firstMain.click();
+  await giftSearch.fill('');
   await page.waitForTimeout(300);
-  const restored = await rowCount();
-  if (restored !== full) {
-    console.error(`FAIL: deselecting did not restore rows (${restored} != ${full})`);
+  if ((await furn.locator('li').count()) !== full) {
+    console.error('FAIL: clearing gift search did not restore rows');
     process.exit(1);
   }
-  console.log(`PASS: furniture type pills filter (${pillText}: ${full} -> ${selected} -> ${restored})`);
+  console.log(`PASS: gift search filters by name (${firstItemName}: ${searchRows.length} rows)`);
 
-  // Drill into a type -> breadcrumb appears; All returns to root
-  await firstMain.click();
-  const drill = furn.locator('.pill-drill').first();
-  if ((await drill.count()) > 0) {
-    await drill.click();
-    await page.waitForSelector('details:has(summary:has-text("Furniture")) .pill-crumbs', { timeout: 5000 });
-    const crumbs = ((await furn.locator('.pill-crumbs').textContent()) ?? '').trim();
-    if (!crumbs.startsWith('All')) {
-      console.error(`FAIL: breadcrumb does not start with All (${crumbs})`);
-      process.exit(1);
-    }
-    await furn.locator('.pill-crumbs button').first().click();
-    await page.waitForTimeout(200);
-    console.log(`PASS: furniture pill drill + breadcrumb (${crumbs})`);
-  } else {
-    console.log('SKIP: no furniture pill with children to drill into');
-  }
-  await firstMain.click(); // deselect back to full list
+  // Gift log: toggle a gift, autosave uploads it, history is searchable, undo
+  const giftedSel = 'button[aria-label="Mark as gifted"], button[aria-label="Already gifted — undo"]';
+  await page.waitForSelector(giftedSel, { timeout: 10000 });
+  const giftToggle = page.locator(giftedSel).first();
+  const before = (await giftToggle.getAttribute('aria-label')) === 'Already gifted — undo';
+  await giftToggle.click();
+  await page.waitForFunction(
+    (wasGifted) => {
+      const el = document.querySelector('[aria-label="Mark as gifted"], [aria-label="Already gifted — undo"]');
+      return el !== null && (el.getAttribute('aria-label') === 'Already gifted — undo') !== wasGifted;
+    },
+    before,
+    { timeout: 5000 },
+  );
 
-  // Buyable pill: AND filter, toggles back
-  const buyableBtn = furn.locator('button:text-is("Buyable only")');
-  await buyableBtn.click();
-  await page.waitForTimeout(300);
-  const buyableRows = await rowCount();
-  if (buyableRows > full) {
-    console.error('FAIL: Buyable filter increased rows');
+  // Gift log: toggle + autosave persists it; undo leaves no residue
+  await waitSaved();
+  console.log('PASS: gift toggle + autosave');
+
+  // Undo -> marker flips back; autosave leaves no residue
+  await giftToggle.click();
+  await page.waitForFunction(
+    (wasGifted) => {
+      const el = document.querySelector('[aria-label="Mark as gifted"], [aria-label="Already gifted — undo"]');
+      return el !== null && (el.getAttribute('aria-label') === 'Already gifted — undo') === wasGifted;
+    },
+    before,
+    { timeout: 5000 },
+  );
+  await waitSaved();
+  console.log('PASS: gift log round-trips (undo + autosave)');
+
+  // Their house: interior/exterior photos, exact-color items, and Buy: lines
+  await page.waitForSelector('section:has-text("Their house") img[alt^="Inside"]', { timeout: 15000 });
+  await page.waitForSelector('section:has-text("Their house") img[alt^="Outside"]', { timeout: 5000 });
+  const houseItems = await page.locator('section:has-text("Their house") li').count();
+  if (houseItems === 0) {
+    console.error('FAIL: no house items rendered');
     process.exit(1);
   }
-  await buyableBtn.click();
-  await page.waitForTimeout(300);
-  if ((await rowCount()) !== full) {
-    console.error('FAIL: Buyable off did not restore rows');
+  const buyLine = await page.locator('p:has-text("Buy:")').count();
+  if (buyLine === 0) {
+    console.error('FAIL: gift cards should show a Buy: line (source)');
     process.exit(1);
   }
-  console.log(`PASS: buyable pill filters (${full} -> ${buyableRows})`);
-
-  // Catalog tier (in-game categories): Housewares filters rows by game category
-  const housewares = furn.locator('.pill-cat:has-text("Housewares")');
-  if ((await housewares.count()) === 0) {
-    console.log('SKIP: no Housewares catalog pill for this villager');
-  } else {
-    await housewares.click();
-    await page.waitForTimeout(300);
-    const catRows = await furn.locator('li').allTextContents();
-    if (catRows.length === 0 || catRows.some((t) => !t.includes('Housewares'))) {
-      console.error('FAIL: Catalog filter shows non-Housewares rows or nothing');
-      process.exit(1);
-    }
-    await housewares.click();
-    await page.waitForTimeout(300);
-    if ((await rowCount()) !== full) {
-      console.error('FAIL: Catalog deselect did not restore rows');
-      process.exit(1);
-    }
-    console.log(`PASS: catalog tier filters by game category (${catRows.length} rows, all Housewares)`);
-  }
-
-  // Irrelevant expander nests the rest (Surfaces, Music, ...)
-  await page.click('summary:has-text("Irrelevant")');
-  await page.waitForSelector('summary:has-text("Surfaces")', { timeout: 5000 });
-  await page.click('summary:has-text("Surfaces")');
-  await page.waitForSelector('details:has(summary:has-text("Surfaces")) li', { timeout: 5000 });
-  const surfRows = await page.$$eval('details:has(summary:has-text("Surfaces")) li', (els) => els.length);
-  console.log(`Irrelevant -> Surfaces: ${surfRows} rows`);
-  if (!surfRows) {
-    console.error('FAIL: Irrelevant expander did not reveal nested groups');
-    process.exit(1);
-  }
-  console.log('PASS: Irrelevant expander nests the other groups');
-
-  // Their house strip renders
-  await page.waitForSelector('section:has-text("Their house")', { timeout: 5000 });
-  console.log('PASS: house items render');
+  console.log(`PASS: house photos + ${houseItems} house items + Buy: line`);
 
   // Browser back button returns to the list
   await page.goBack();

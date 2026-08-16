@@ -1,15 +1,26 @@
 <script lang="ts">
-import { onDestroy } from 'svelte';
+  import { onDestroy } from 'svelte';
   import { getRefDbState, loadReferenceDb } from './refdb.svelte';
   import { allVillagers, villagerImages, type Villager } from './villagers';
-import { logout } from './session.svelte';
-import { p } from './router';
+  import {
+    getProgressState,
+    allVillagerFlags,
+    toggleFavorite,
+    toggleOnIsland,
+    loadProgress,
+    type VillagerFlags,
+  } from './progress.svelte';
+  import { logout } from './session.svelte';
+  import { p } from './router';
 
   const refdb = getRefDbState();
+  const progress = getProgressState();
 
   let villagers: Villager[] = $state([]);
   let images = $state(new Map<string, Uint8Array<ArrayBuffer>>());
   let query = $state('');
+  let showFavorites = $state(false);
+  let showIsland = $state(false);
   let loggingOut = $state(false);
 
   const urls = new Map<string, string>();
@@ -22,21 +33,37 @@ import { p } from './router';
     }
   });
 
+  // Load the user's gift log / flags once (idempotent).
+  $effect(() => {
+    if (refdb.status === 'ready' && progress.status === 'idle') void loadProgress();
+  });
+
+  const flags = $derived.by(() => {
+    if (!progress.db) return new Map<string, VillagerFlags>();
+    void progress.version;
+    return allVillagerFlags();
+  });
+
   onDestroy(() => {
     for (const url of urls.values()) URL.revokeObjectURL(url);
     urls.clear();
   });
 
   const filtered = $derived.by(() => {
+    let list = villagers;
     const q = query.trim().toLowerCase();
-    if (!q) return villagers;
-    return villagers.filter(
-      (v) =>
-        v.name.toLowerCase().includes(q) ||
-        v.species.toLowerCase().includes(q) ||
-        v.personality.toLowerCase().includes(q) ||
-        v.hobby.toLowerCase().includes(q),
-    );
+    if (q) {
+      list = list.filter(
+        (v) =>
+          v.name.toLowerCase().includes(q) ||
+          v.species.toLowerCase().includes(q) ||
+          v.personality.toLowerCase().includes(q) ||
+          v.hobby.toLowerCase().includes(q),
+      );
+    }
+    if (showFavorites) list = list.filter((v) => flags.get(v.name)?.favorite);
+    if (showIsland) list = list.filter((v) => flags.get(v.name)?.onIsland);
+    return list;
   });
 
   function imgFor(name: string): string | null {
@@ -72,6 +99,18 @@ import { p } from './router';
     await logout();
     loggingOut = false;
   }
+
+  // Toggling a list filter clears the search text so the narrowed list is
+  // visible immediately instead of staying filtered by a stale query.
+  function toggleFavorites() {
+    showFavorites = !showFavorites;
+    query = '';
+  }
+
+  function toggleIsland() {
+    showIsland = !showIsland;
+    query = '';
+  }
 </script>
 
 <div class="flex min-h-screen flex-col bg-green-50">
@@ -93,6 +132,26 @@ import { p } from './router';
       class="w-full rounded-lg border border-green-300 px-3 py-2.5 text-base text-green-900 placeholder-green-400 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200"
     />
     {#if refdb.status === 'ready'}
+      <div class="mt-2 flex gap-2">
+        <button
+          aria-pressed={showFavorites}
+          onclick={toggleFavorites}
+          class="rounded-full border px-3 py-1.5 text-sm transition-colors {showFavorites
+            ? 'border-amber-400 bg-amber-100 text-amber-800'
+            : 'border-green-300 bg-white text-green-700 hover:bg-green-100'}"
+        >
+          ★ Favorites
+        </button>
+        <button
+          aria-pressed={showIsland}
+          onclick={toggleIsland}
+          class="rounded-full border px-3 py-1.5 text-sm transition-colors {showIsland
+            ? 'border-green-700 bg-green-700 text-white'
+            : 'border-green-300 bg-white text-green-700 hover:bg-green-100'}"
+        >
+          ✓ On my island
+        </button>
+      </div>
       <p class="mt-2 text-xs text-green-700">
         {filtered.length} of {villagers.length} villagers
       </p>
@@ -130,10 +189,12 @@ import { p } from './router';
       {:else}
         <ul class="mx-auto max-w-2xl divide-y divide-green-200 overflow-hidden rounded-xl border border-green-200 bg-white">
           {#each filtered as v (v.name)}
-            <li>
+            {@const fav = flags.get(v.name)?.favorite ?? false}
+            {@const island = flags.get(v.name)?.onIsland ?? false}
+            <li class="flex items-center gap-2 px-4 py-3 hover:bg-green-50">
               <a
                 href={p('/villager/:name', { params: { name: v.name } })}
-                class="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-green-50"
+                class="flex min-w-0 flex-1 items-center gap-3"
               >
                 {#if imgFor(v.name)}
                   <img
@@ -157,6 +218,28 @@ import { p } from './router';
                 </div>
                 <span class="text-green-400">›</span>
               </a>
+              <button
+                aria-label={`Toggle favorite for ${v.name}`}
+                aria-pressed={fav}
+                title={fav ? 'Unfavorite' : 'Favorite'}
+                onclick={() => toggleFavorite(v.name)}
+                class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm font-bold transition-colors {fav
+                  ? 'border-amber-400 bg-amber-400 text-white'
+                  : 'border-green-300 text-amber-500 hover:bg-green-100'}"
+              >
+                ★
+              </button>
+              <button
+                aria-label={`Toggle on-island for ${v.name}`}
+                aria-pressed={island}
+                title={island ? 'Not on my island' : 'On my island'}
+                onclick={() => toggleOnIsland(v.name)}
+                class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm font-bold transition-colors {island
+                  ? 'border-green-700 bg-green-700 text-white'
+                  : 'border-green-300 text-green-600 hover:bg-green-100'}"
+              >
+                ✓
+              </button>
             </li>
           {/each}
         </ul>

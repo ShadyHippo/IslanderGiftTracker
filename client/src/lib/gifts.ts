@@ -14,6 +14,8 @@ export interface GiftIdea {
   styleMatch: string[];
   /** true when the item has a purchase price (not NFS/''). */
   buyable: boolean;
+  /** where the item can be bought/obtained (xlsx Source column, e.g. "Nook's Cranny"). */
+  source: string;
   /** Furniture: cataloged category path ('Kitchen/Appliance/Fridge'); clothing: ''. */
   typePath: string;
 }
@@ -26,23 +28,19 @@ export interface GiftGroup {
   items: GiftIdea[];
 }
 
+export const FURNITURE_CATS = ['Housewares', 'Miscellaneous', 'Wall-mounted', 'Ceiling Decor', 'Interior Structures'];
+
 export const GIFT_GROUPS: { key: string; label: string; categories: string[] }[] = [
   {
     key: 'furniture',
     label: 'Furniture',
-    categories: ['Housewares', 'Miscellaneous', 'Wall-mounted', 'Ceiling Decor', 'Interior Structures'],
+    categories: FURNITURE_CATS,
   },
   {
     key: 'clothing',
     label: 'Clothing',
     categories: ['Tops', 'Bottoms', 'Dress-Up', 'Headwear', 'Accessories', 'Socks', 'Shoes', 'Bags', 'Umbrellas', 'Clothing Other'],
   },
-  { key: 'surfaces', label: 'Surfaces', categories: ['Wallpaper', 'Floors', 'Rugs'] },
-  { key: 'music', label: 'Music', categories: ['Music'] },
-  { key: 'critters', label: 'Critters', categories: ['Insects', 'Fish', 'Sea Creatures'] },
-  { key: 'collections', label: 'Collections', categories: ['Fossils', 'Artwork', 'Gyroids'] },
-  { key: 'tools', label: 'Tools & Outdoors', categories: ['ToolsGoods', 'Fencing'] },
-  { key: 'other', label: 'Other', categories: ['Other'] },
 ];
 const norm = (s: unknown) => (typeof s === 'string' ? s.trim().toLowerCase() : '');
 
@@ -55,7 +53,7 @@ export function giftIdeasByGroup(db: Database, villager: VillagerRow): GiftGroup
   const allCats = GIFT_GROUPS.flatMap((g) => g.categories);
   const placeholders = allCats.map(() => '?').join(',');
   const res = db.exec(
-    `SELECT name, category, variation, style, color1, color2, label_themes, buy, type_path
+    `SELECT name, category, variation, style, color1, color2, label_themes, buy, source, type_path
      FROM items WHERE category IN (${placeholders})`,
     allCats,
   );
@@ -67,7 +65,7 @@ export function giftIdeasByGroup(db: Database, villager: VillagerRow): GiftGroup
 
   if (res.length) {
     for (const row of res[0].values) {
-      const [name, category, variation, style, color1, color2, labelThemes, buy, typePath] = row;
+      const [name, category, variation, style, color1, color2, labelThemes, buy, source, typePath] = row;
       if (typeof name !== 'string') continue;
       const groupKey = GIFT_GROUPS.find((g) => g.categories.includes(String(category)))?.key;
       if (!groupKey) continue;
@@ -95,6 +93,7 @@ export function giftIdeasByGroup(db: Database, villager: VillagerRow): GiftGroup
         colorMatch,
         styleMatch,
         buyable: typeof buy === 'string' && parseFloat(buy) > 0,
+        source: typeof source === 'string' ? source : '',
         typePath: typeof typePath === 'string' ? typePath : '',
       });
     }
@@ -243,4 +242,149 @@ export function houseItems(villager: VillagerRow, limit = 12): string[] {
     .filter(Boolean)
     .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
     .slice(0, limit);
+}
+
+export interface HouseItemDetail {
+  /** display name (titlecased, as passed in). */
+  name: string;
+  category: string;
+  /** distinct color1/color2 values across the item's variations. */
+  colors: string[];
+}
+
+// Items/names are inconsistently cased in the xlsx ('accessories stand',
+// '1-Up Mushroom'), so all house queries match case-insensitively.
+const FURNITURE_PH = FURNITURE_CATS.map(() => '?').join(',');
+
+/** True when the ref DB contains the build-time house tables (old refs don't). */
+function hasHouseTables(db: Database): boolean {
+  const res = db.exec(
+    "SELECT count(*) FROM sqlite_master WHERE type='table' AND name IN ('house_items','house_images')",
+  );
+  return !!res.length && Number(res[0].values[0]?.[0]) === 2;
+}
+
+/** Per-item details for the villager's house items, keyed by display name.
+ * Uses the build-time `house_items` table (Nookipedia nh_house), which carries
+ * the EXACT variant colors of the villager's original house. Falls back to
+ * aggregating every variation's colors only for items with no data. */
+export function houseItemsDetailed(
+  db: Database,
+  villagerName: string,
+  names: string[],
+): Map<string, HouseItemDetail> {
+  const out = new Map<string, HouseItemDetail>();
+  if (!names.length) return out;
+  // Exact per-villager colors from the build (lowercase match on villager name).
+  const exactByKey = new Map<string, HouseItemDetail>();
+  if (hasHouseTables(db)) {
+    const houseRes = db.exec('SELECT name, category, color1, color2 FROM house_items WHERE lower(villager) = ?', [
+      villagerName.toLowerCase(),
+    ]);
+    if (houseRes.length) {
+      for (const [dbName, category, color1, color2] of houseRes[0].values) {
+        if (typeof dbName !== 'string') continue;
+        const key = dbName.toLowerCase();
+        const existing = exactByKey.get(key);
+        const colors = new Set<string>(existing?.colors ?? []);
+        if (typeof color1 === 'string' && color1.trim()) colors.add(color1.trim());
+        if (typeof color2 === 'string' && color2.trim()) colors.add(color2.trim());
+        exactByKey.set(key, {
+          name: existing?.name ?? dbName,
+          category: typeof category === 'string' && category.trim() ? category.trim() : (existing?.category ?? ''),
+          colors: [...colors],
+        });
+      }
+    }
+  }
+  // Fallback: aggregate colors across ALL variants for items without data
+  // (mismatched names, offline build without the house_items table, etc.).
+  const missing = names.filter((n) => !exactByKey.has(n.toLowerCase()));
+  if (missing.length) {
+    const namePh = missing.map(() => '?').join(',');
+    const res = db.exec(
+      `SELECT name, category, color1, color2 FROM items
+       WHERE lower(name) IN (${namePh}) AND category IN (${FURNITURE_PH})`,
+      [...missing.map((n) => n.toLowerCase()), ...FURNITURE_CATS],
+    );
+    if (res.length) {
+      const colorsBy = new Map<string, Set<string>>();
+      const catBy = new Map<string, string>();
+      for (const [dbName, category, color1, color2] of res[0].values) {
+        if (typeof dbName !== 'string') continue;
+        const key = dbName.toLowerCase();
+        let set = colorsBy.get(key);
+        if (!set) {
+          set = new Set();
+          colorsBy.set(key, set);
+        }
+        if (typeof color1 === 'string' && color1.trim()) set.add(color1.trim());
+        if (typeof color2 === 'string' && color2.trim()) set.add(color2.trim());
+        if (typeof category === 'string' && category.trim() && !catBy.has(key)) catBy.set(key, category.trim());
+      }
+      for (const name of missing) {
+        const key = name.toLowerCase();
+        const colors = [...(colorsBy.get(key) ?? [])].sort();
+        const category = catBy.get(key) ?? '';
+        if (colors.length || category) exactByKey.set(key, { name, category, colors });
+      }
+    }
+  }
+  for (const name of names) {
+    const hit = exactByKey.get(name.toLowerCase());
+    if (hit) out.set(name, { ...hit, name });
+  }
+  return out;
+}
+
+/** Full-quality interior/exterior photos of the villager's original house. */
+export function housePhotos(
+  db: Database,
+  villagerName: string,
+): { interior: Uint8Array<ArrayBuffer> | null; exterior: Uint8Array<ArrayBuffer> | null } {
+  const out: { interior: Uint8Array<ArrayBuffer> | null; exterior: Uint8Array<ArrayBuffer> | null } = {
+    interior: null,
+    exterior: null,
+  };
+  if (!hasHouseTables(db)) return out;
+  const res = db.exec('SELECT kind, data FROM house_images WHERE lower(villager) = ?', [
+    villagerName.toLowerCase(),
+  ]);
+  if (res.length) {
+    for (const [kind, data] of res[0].values) {
+      if ((kind === 'interior' || kind === 'exterior') && data instanceof Uint8Array) {
+        out[kind] = data as Uint8Array<ArrayBuffer>;
+      }
+    }
+  }
+  return out;
+}
+
+/** Image bytes for house items, keyed by display name (base variation preferred). */
+export function houseImages(db: Database, names: string[]): Map<string, Uint8Array<ArrayBuffer>> {
+  const out = new Map<string, Uint8Array<ArrayBuffer>>();
+  if (!names.length) return out;
+  const namePh = names.map(() => '?').join(',');
+  const res = db.exec(
+    `SELECT name, variation, data FROM images
+     WHERE lower(name) IN (${namePh}) AND category IN (${FURNITURE_PH})`,
+    [...names.map((n) => n.toLowerCase()), ...FURNITURE_CATS],
+  );
+  if (!res.length) return out;
+  const best = new Map<string, { variation: string; data: Uint8Array<ArrayBuffer> }>();
+  for (const row of res[0].values) {
+    const [dbName, variation, data] = row;
+    if (typeof dbName !== 'string' || !(data instanceof Uint8Array)) continue;
+    const key = dbName.toLowerCase();
+    const varStr = typeof variation === 'string' ? variation : '';
+    const existing = best.get(key);
+    if (!existing || (varStr === '' && existing.variation !== '')) {
+      best.set(key, { variation: varStr, data: data as Uint8Array<ArrayBuffer> });
+    }
+  }
+  for (const name of names) {
+    const hit = best.get(name.toLowerCase());
+    if (hit) out.set(name, hit.data);
+  }
+  return out;
 }

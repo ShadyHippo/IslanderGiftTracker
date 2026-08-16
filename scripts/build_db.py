@@ -340,6 +340,7 @@ def build_variant_lookup(sheets):
                 continue
             out.setdefault(nm, []).append({
                 "var": norm(g(row, "Variation")),
+                "var_raw": g(row, "Variation"),
                 "pat": norm(g(row, "Pattern")),
                 "vid": str(g(row, "Variant ID") or '').strip(),
                 "c1": g(row, "Color 1"), "c2": g(row, "Color 2"),
@@ -401,6 +402,24 @@ def cached_house_image(url, key):
     return data
 
 
+def cached_item_icon(url):
+    """Fetch a small Nookipedia NH_Icon.png (exact variation icon), disk-cached.
+    Shares the house image cache dir; files end in .png so they never collide
+    with the interior/exterior photo keys ('.img')."""
+    if not url:
+        return None
+    key = urllib.parse.unquote(url.split('/')[-1])
+    p = os.path.join(HOUSE_IMG_CACHE, key)
+    if os.path.exists(p):
+        with open(p, "rb") as f:
+            return f.read()
+    data = http_get(url, timeout=30)
+    if data:
+        with open(p, "wb") as f:
+            f.write(data)
+    return data
+
+
 def build_house_data(db, sheets, no_images):
     """Create + fill house_items (exact variant colors) and house_images
     (interior/exterior photos, full quality). Skips gracefully on network errors."""
@@ -409,6 +428,8 @@ def build_house_data(db, sheets, no_images):
                " color1 TEXT, color2 TEXT)")
     db.execute("CREATE TABLE house_images (villager TEXT, kind TEXT, data BLOB,"
                " PRIMARY KEY (villager, kind))")
+    db.execute("CREATE TABLE house_item_images (villager TEXT, name TEXT, data BLOB,"
+               " PRIMARY KEY (villager, name))")
     try:
         cargo = fetch_nh_house()
     except Exception as e:
@@ -427,6 +448,7 @@ def build_house_data(db, sheets, no_images):
             items = json.loads(_html.unescape(t.get("items") or ""))
         except (ValueError, TypeError):
             items = []
+        icon_tasks = []
         for it in items:
             nm = it.get("name", "")
             var = house_variation_from_url(it.get("image_url", ""))
@@ -437,7 +459,26 @@ def build_house_data(db, sheets, no_images):
             db.execute("INSERT INTO house_items VALUES (?,?,?,?,?)",
                        (villager, hit["name"], hit["category"], hit["c1"], hit["c2"]))
             n_items += 1
+            if not no_images:
+                icon_tasks.append((hit, it.get("image_url", "")))
         if not no_images:
+            # Exact per-villager item icons (also covers clothing like chef's
+            # outfit, which the furniture-only images query would miss).
+            for hit, url in icon_tasks:
+                icon = cached_item_icon(url)
+                if not icon:
+                    continue
+                icon = maybe_thumb(urllib.parse.unquote(url.split('/')[-1]), icon)
+                db.execute("INSERT OR REPLACE INTO house_item_images VALUES (?,?,?)",
+                           (villager, hit["name"], sqlite3.Binary(icon)))
+                # Backfill the generic images table with the exact icon so gift
+                # suggestions also get it (fixes names the pattern-guesser misses,
+                # e.g. cream and sugar -> Cream_%26_Sugar on the wiki).
+                var_raw = (hit.get("var_raw") or "").strip().lower()
+                back_var = house_variation_from_url(url) if var_raw in ("", "na", "none") else hit["var_raw"]
+                db.execute("INSERT OR REPLACE INTO images VALUES (?,?,?,?,?)",
+                           (hit["category"], hit["name"], back_var,
+                            sqlite3.Binary(icon), url))
             for kind, field in (("interior", "interior_image_url"),
                                 ("exterior", "exterior_image_url")):
                 url = t.get(field)
@@ -581,7 +622,7 @@ def main():
                      if seen_cat.setdefault(t[0], 0) < limit and not seen_cat.__setitem__(t[0], seen_cat[t[0]] + 1)]
 
         def get_cache_bytes(fn):
-            for d in (IMAGES_RAW, CACHE_DIR):
+            for d in (IMAGES_RAW, CACHE_DIR, HOUSE_IMG_CACHE):
                 p = os.path.join(d, fn)
                 if os.path.exists(p):
                     with open(p, "rb") as f:
@@ -600,6 +641,23 @@ def main():
             pats = PATTERNS.get(cat, PATTERNS["default"])
             vpats = (["{n}_({v})_NH_Icon.png", "{n}_({v})_NH_Texture.png", "{n}_({v})_NH.png"]
                      if var else [])
+            # Exact variation icons FIRST (e.g. Soft-Serve_Lamp_(Strawberry_Swirl))
+            # — the base icon exists for most items and must not shadow them.
+            if vpats:
+                v = titlecase(var).replace(' ', '_')
+                for base in dict.fromkeys(bases):
+                    for pat in vpats:
+                        fn = pat.format(n=base, v=v)
+                        data = get_cache_bytes(fn)
+                        if data is None:
+                            data = try_fetch(fn)
+                            if data:
+                                with open(os.path.join(CACHE_DIR, fn), "wb") as f:
+                                    f.write(data)
+                        if data:
+                            data = maybe_thumb(fn, data)
+                        if data:
+                            return cat, name, var, fn, data
             for base in dict.fromkeys(bases):
                 for pat in pats:
                     fn = pat.format(n=base)
@@ -613,21 +671,6 @@ def main():
                         data = maybe_thumb(fn, data)
                     if data:
                         return cat, name, var, fn, data
-            if vpats:
-                v = titlecase(var).replace(' ', '_')
-                for base in dict.fromkeys(bases):
-                    for pat in vpats:
-                        fn = pat.format(n=base, v=v)
-                        data = get_cache_bytes(fn)
-                        if data is None:
-                            data = try_fetch(fn)
-                            if data:
-                                with open(os.path.join(IMAGES_RAW, fn), "wb") as f:
-                                    f.write(data)
-                        if data:
-                            data = maybe_thumb(fn, data)
-                        if data:
-                            return cat, name, var, fn, data
             data = (wiki_allimages(name) or wiki_pageimages(name) or wiki_gallery(name))
             if data:
                 if isinstance(data, str):  # url from pageimages

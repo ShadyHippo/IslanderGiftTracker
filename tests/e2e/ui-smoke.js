@@ -210,6 +210,11 @@ try {
     console.error('FAIL: no house items rendered');
     process.exit(1);
   }
+  const houseThumbs = await page.locator('section:has-text("Their house") li img[src^="blob:"]').count();
+  if (houseThumbs === 0) {
+    console.error('FAIL: house items should render exact thumbnails (blob: URLs)');
+    process.exit(1);
+  }
   const buyLine = await page.locator('p:has-text("Buy:")').count();
   if (buyLine === 0) {
     console.error('FAIL: gift cards should show a Buy: line (source)');

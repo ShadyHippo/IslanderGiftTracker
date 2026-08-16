@@ -126,7 +126,7 @@
     groups = giftIdeasByGroup(db, villager);
     const names = houseItems(villager);
     house = houseItemsDetailed(db, villager.name, names);
-    houseImgs = houseImages(db, names);
+    houseImgs = houseImages(db, villager.name, names);
     housePhotosBytes = housePhotos(db, villager.name);
   });
 

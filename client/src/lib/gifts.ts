@@ -360,15 +360,41 @@ export function housePhotos(
   return out;
 }
 
-/** Image bytes for house items, keyed by display name (base variation preferred). */
-export function houseImages(db: Database, names: string[]): Map<string, Uint8Array<ArrayBuffer>> {
+/** Image bytes for house items, keyed by display name. Prefers the exact
+ *  per-villager icon from the build-time `house_item_images` table (nh_house —
+ *  includes clothing like chef's outfit, which the furniture-only query below
+ *  would skip); falls back to the generic images table. */
+export function houseImages(
+  db: Database,
+  villagerName: string,
+  names: string[],
+): Map<string, Uint8Array<ArrayBuffer>> {
   const out = new Map<string, Uint8Array<ArrayBuffer>>();
   if (!names.length) return out;
-  const namePh = names.map(() => '?').join(',');
+  let found = new Set<string>();
+  try {
+    const namePh = names.map(() => '?').join(',');
+    const res = db.exec(
+      `SELECT name, data FROM house_item_images WHERE lower(villager) = ? AND lower(name) IN (${namePh})`,
+      [villagerName.toLowerCase(), ...names.map((n) => n.toLowerCase())],
+    );
+    if (res.length) {
+      for (const [dbName, data] of res[0].values) {
+        if (typeof dbName !== 'string' || !(data instanceof Uint8Array)) continue;
+        out.set(dbName, data as Uint8Array<ArrayBuffer>);
+        found.add(dbName.toLowerCase());
+      }
+    }
+  } catch {
+    // older ref db without house_item_images — fall through to generic
+  }
+  const missing = names.filter((n) => !found.has(n.toLowerCase()));
+  if (!missing.length) return out;
+  const namePh = missing.map(() => '?').join(',');
   const res = db.exec(
     `SELECT name, variation, data FROM images
      WHERE lower(name) IN (${namePh}) AND category IN (${FURNITURE_PH})`,
-    [...names.map((n) => n.toLowerCase()), ...FURNITURE_CATS],
+    [...missing.map((n) => n.toLowerCase()), ...FURNITURE_CATS],
   );
   if (!res.length) return out;
   const best = new Map<string, { variation: string; data: Uint8Array<ArrayBuffer> }>();
@@ -382,7 +408,7 @@ export function houseImages(db: Database, names: string[]): Map<string, Uint8Arr
       best.set(key, { variation: varStr, data: data as Uint8Array<ArrayBuffer> });
     }
   }
-  for (const name of names) {
+  for (const name of missing) {
     const hit = best.get(name.toLowerCase());
     if (hit) out.set(name, hit.data);
   }

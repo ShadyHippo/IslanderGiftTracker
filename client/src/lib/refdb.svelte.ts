@@ -9,6 +9,7 @@ interface RefManifestEntry {
 
 interface RefManifest {
   latest: number;
+  imageHash?: string;
   references: RefManifestEntry[] | null;
 }
 
@@ -122,7 +123,24 @@ export async function loadReferenceDb(): Promise<void> {
   state.progress = 0;
   state.error = null;
   try {
-    const manifest = await fetchManifest();
+    // Try to fetch manifest; if server is offline, fall back to cached DB
+    let manifest: RefManifest;
+    try {
+      manifest = await fetchManifest();
+    } catch {
+      const cached = await idbGet();
+      if (cached && cached.bytes.byteLength > 0) {
+        // Server unreachable but we have a cached DB — use it silently
+        state.status = 'initializing';
+        const inflated = await gunzip(cached.bytes);
+        const SQL = await initSql();
+        state.db = new SQL.Database(new Uint8Array(inflated));
+        state.status = 'ready';
+        return;
+      }
+      throw new Error('Can\u2019t reach the server and no cached data available.');
+    }
+
     const entry = manifest.references?.find((r) => r.version === manifest.latest);
     if (!entry) {
       throw new Error('Reference data isn\u2019t available yet \u2014 try again in a moment.');
@@ -134,7 +152,7 @@ export async function loadReferenceDb(): Promise<void> {
     // the manifest. We do NOT re-hash the cached bytes here — crypto.subtle
     // only exists in secure contexts (https/localhost), so on plain http LAN/
     // Tailscale URLs it is unavailable and an empty hash would always fail the
-    // comparison, forcing a 620 MB re-download on every refresh.
+    // comparison, forcing a re-download on every refresh.
     if (cached && cached.version === manifest.latest && cached.sha === entry.sha256) {
       gz = cached.bytes;
     } else {
@@ -147,9 +165,6 @@ export async function loadReferenceDb(): Promise<void> {
           `reference db checksum mismatch: expected ${entry.sha256.slice(0, 12)}…, got ${sum.slice(0, 12)}…`,
         );
       }
-      // On insecure contexts we can't compute a sha to verify, so trust the
-      // manifest's checksum and store it verbatim (the checksum is still the
-      // key that decides cache hits on the next load).
       await idbPut(manifest.latest, sum || entry.sha256, gz);
     }
 
@@ -158,8 +173,56 @@ export async function loadReferenceDb(): Promise<void> {
     const SQL = await initSql();
     state.db = new SQL.Database(new Uint8Array(inflated));
     state.status = 'ready';
+
+    // Trigger image pre-caching in background (non-blocking)
+    preCacheImages(manifest.imageHash);
   } catch (e) {
     state.status = 'error';
     state.error = e instanceof Error ? e.message : 'failed to load reference data';
+  }
+}
+
+const IMG_IDB_STORE = 'imgcache';
+const IMG_IDB_KEY = 'hash';
+
+async function preCacheImages(imageHash: string | undefined): Promise<void> {
+  if (!imageHash || !navigator.serviceWorker?.controller) return;
+
+  // Check if images are already cached for this hash
+  try {
+    const db = await openIdb();
+    const cached = await new Promise<{ hash?: string }>((resolve) => {
+      const tx = db.transaction(IMG_IDB_STORE, 'readonly');
+      const req = tx.objectStore(IMG_IDB_STORE).get(IMG_IDB_KEY);
+      req.onsuccess = () => resolve(req.result ?? {});
+      req.onerror = () => resolve({});
+      tx.oncomplete = () => db.close();
+    });
+    if (cached.hash === imageHash) return; // already cached
+
+    // Fetch image manifest and send to service worker
+    const res = await fetch('/img/manifest.json', { cache: 'no-store' });
+    if (!res.ok) return;
+    const manifest = await res.json();
+    if (!manifest?.urls?.length) return;
+
+    const sw = navigator.serviceWorker.controller;
+    sw.postMessage({ type: 'CACHE_IMAGES', urls: manifest.urls });
+
+    // Listen for completion
+    const onMsg = (e: MessageEvent) => {
+      if (e.data?.type === 'IMAGE_COMPLETE') {
+        navigator.serviceWorker.removeEventListener('message', onMsg);
+        // Store the hash so we don't re-cache
+        openIdb().then((idb) => {
+          const tx2 = idb.transaction(IMG_IDB_STORE, 'readwrite');
+          tx2.objectStore(IMG_IDB_STORE).put({ hash: imageHash }, IMG_IDB_KEY);
+          tx2.oncomplete = () => idb.close();
+        });
+      }
+    };
+    navigator.serviceWorker.addEventListener('message', onMsg);
+  } catch {
+    // non-critical: images will be cached on-demand
   }
 }

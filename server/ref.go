@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"io"
 	"net/http"
 	"os"
@@ -84,7 +85,7 @@ func (s *server) handleManifest(w http.ResponseWriter, r *http.Request) {
 	}
 	// Never cache: the client must always see fresh sha256 values.
 	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, http.StatusOK, map[string]any{"latest": latestVersion(entries), "references": entries})
+ writeJSON(w, http.StatusOK, map[string]any{"latest": latestVersion(entries), "references": entries, "imageHash": s.imageHash()})
 }
 
 func (s *server) handleRefDownload(w http.ResponseWriter, r *http.Request) {
@@ -118,4 +119,66 @@ func latestVersion(entries []refEntry) int {
 		}
 	}
 	return latest
+}
+
+var imgFileRe = regexp.MustCompile(`^[a-z0-9_]+\.png$`)
+
+func (s *server) handleImageFile(w http.ResponseWriter, r *http.Request) {
+	category := r.PathValue("category")
+	filename := r.PathValue("filename")
+	if category == "" || filename == "" || !imgFileRe.MatchString(filename) {
+		http.NotFound(w, r)
+		return
+	}
+	abs := filepath.Join(s.refDir, "img", category, filename)
+	// Prevent directory traversal: resolved path must be inside refDir/img/{category}/
+	imgCategoryDir := filepath.Join(s.refDir, "img", category)
+	if filepath.Dir(abs) != imgCategoryDir {
+		http.NotFound(w, r)
+		return
+	}
+	if _, err := os.Stat(abs); err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	http.ServeFile(w, r, abs)
+}
+
+func (s *server) handleImageManifest(w http.ResponseWriter, r *http.Request) {
+	abs := filepath.Join(s.refDir, "img", "manifest.json")
+	data, err := os.ReadFile(abs)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "image manifest not available"})
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Write(data)
+}
+
+// imageHash returns the image hash from the meta table of the latest reference DB,
+// or empty string if unavailable.
+func (s *server) imageHash() string {
+	entries, err := s.referenceEntries()
+	if err != nil || len(entries) == 0 {
+		return ""
+	}
+	latest := entries[0]
+	dbPath := filepath.Join(s.refDir, latest.File)
+	// The .gz file is what we have; we can't read meta from it directly.
+	// Instead, read from the image manifest if available.
+	manifestPath := filepath.Join(s.refDir, "img", "manifest.json")
+	data, err := os.ReadFile(manifestPath)
+	if err != nil {
+		return ""
+	}
+	var m struct {
+		Hash string `json:"hash"`
+	}
+	if json.Unmarshal(data, &m) != nil {
+		return ""
+	}
+	_ = dbPath
+	return m.Hash
 }

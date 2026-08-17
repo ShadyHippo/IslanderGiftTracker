@@ -1,7 +1,6 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte';
   import { getRefDbState, loadReferenceDb } from './refdb.svelte';
-  import { allVillagers, villagerImages, type Villager } from './villagers';
+  import { allVillagers, villagerImageUrls, type Villager } from './villagers';
   import {
     getProgressState,
     allVillagerFlags,
@@ -16,19 +15,17 @@
   const progress = getProgressState();
 
   let villagers: Villager[] = $state([]);
-  let images = $state(new Map<string, Uint8Array<ArrayBuffer>>());
+  let images = $state(new Map<string, string>());
   let query = $state('');
   let showFavorites = $state(false);
   let showIsland = $state(false);
   let loggingOut = $state(false);
 
-  const urls = new Map<string, string>();
-
   $effect(() => {
     const db = refdb.db;
     if (db) {
       villagers = allVillagers(db);
-      images = villagerImages(db);
+      images = villagerImageUrls(db);
     }
   });
 
@@ -38,10 +35,7 @@
     return allVillagerFlags();
   });
 
-  onDestroy(() => {
-    for (const url of urls.values()) URL.revokeObjectURL(url);
-    urls.clear();
-  });
+
 
   const filtered = $derived.by(() => {
     let list = villagers;
@@ -61,14 +55,7 @@
   });
 
   function imgFor(name: string): string | null {
-    const data = images.get(name);
-    if (!data) return null;
-    let url = urls.get(name);
-    if (!url) {
-      url = URL.createObjectURL(new Blob([data]));
-      urls.set(name, url);
-    }
-    return url;
+    return images.get(name) ?? null;
   }
 
   const PALETTE = [

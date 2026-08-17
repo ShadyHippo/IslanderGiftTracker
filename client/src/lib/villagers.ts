@@ -44,25 +44,24 @@ export function villagerByName(db: Database, name: string): VillagerRow | null {
   return obj as VillagerRow;
 }
 
-/** Blob image bytes per villager name, from the images table. */
-export function villagerImages(db: Database): Map<string, Uint8Array<ArrayBuffer>> {
-  const out = new Map<string, Uint8Array<ArrayBuffer>>();
-  // Category is stored as the raw sheet name ("Villagers"); match case-insensitively.
-  const res = db.exec("SELECT name, data FROM images WHERE lower(category) = 'villagers'");
+/** Image URL per villager name, from the images table. */
+export function villagerImageUrls(db: Database): Map<string, string> {
+  const out = new Map<string, string>();
+  const res = db.exec("SELECT name, url FROM images WHERE lower(category) = 'villagers'");
   if (!res.length) return out;
   const { values } = res[0];
   for (const row of values) {
     const name = row[0];
-    const data = row[1];
-    if (typeof name === 'string' && data instanceof Uint8Array) out.set(name, data);
+    const url = row[1];
+    if (typeof name === 'string' && typeof url === 'string' && url) out.set(name, url);
   }
   return out;
 }
 
-/** Single villager's icon bytes, or null. */
-export function villagerImage(db: Database, name: string): Uint8Array<ArrayBuffer> | null {
-  const res = db.exec("SELECT data FROM images WHERE lower(category) = 'villagers' AND name = ?", [name]);
+/** Single villager's image URL, or null. */
+export function villagerImageUrl(db: Database, name: string): string | null {
+  const res = db.exec("SELECT url FROM images WHERE lower(category) = 'villagers' AND name = ?", [name]);
   if (!res.length || !res[0].values.length) return null;
-  const data = res[0].values[0][0];
-  return data instanceof Uint8Array ? data : null;
+  const url = res[0].values[0][0];
+  return typeof url === 'string' && url ? url : null;
 }

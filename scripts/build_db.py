@@ -40,6 +40,15 @@ thumb = 0
 MISSED_LOG = os.path.join(ROOT, "images-missed.txt")
 DB_VERSION = 1
 
+
+def sanitize_filename(s):
+    """Lowercase, spaces->underscores, strip parens/apostrophes/special chars."""
+    s = _html.unescape(str(s))
+    s = s.lower().replace(' ', '_').replace('-', '_')
+    s = re.sub(r"[()'&?/\\]", '', s)
+    s = re.sub(r'_+', '_', s).strip('_')
+    return s
+
 NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/126.0 Safari/537.36")
@@ -403,16 +412,17 @@ def cached_item_icon(url):
     return data
 
 
-def build_house_data(db, sheets, no_images):
+def build_house_data(db, sheets, no_images, img_dir=None):
     """Create + fill house_items (exact variant colors) and house_images
-    (interior/exterior photos, full quality). Skips gracefully on network errors."""
+    (interior/exterior photos, full quality). Skips gracefully on network errors.
+    If img_dir is set, write images to disk and store URLs instead of BLOBs."""
     print("[2c/4] house data (Nookipedia nh_house) ...")
     db.execute("CREATE TABLE house_items (villager TEXT, name TEXT, category TEXT,"
                " color1 TEXT, color2 TEXT)")
-    db.execute("CREATE TABLE house_images (villager TEXT, kind TEXT, data BLOB,"
-               " PRIMARY KEY (villager, kind))")
-    db.execute("CREATE TABLE house_item_images (villager TEXT, name TEXT, data BLOB,"
-               " PRIMARY KEY (villager, name))")
+    db.execute("CREATE TABLE house_images (villager TEXT, kind TEXT,"
+               " url TEXT, PRIMARY KEY (villager, kind))")
+    db.execute("CREATE TABLE house_item_images (villager TEXT, name TEXT,"
+               " url TEXT, PRIMARY KEY (villager, name))")
     try:
         cargo = fetch_nh_house()
     except Exception as e:
@@ -452,16 +462,32 @@ def build_house_data(db, sheets, no_images):
                 if not icon:
                     continue
                 icon = maybe_thumb(urllib.parse.unquote(url.split('/')[-1]), icon)
-                db.execute("INSERT OR REPLACE INTO house_item_images VALUES (?,?,?)",
-                           (villager, hit["name"], sqlite3.Binary(icon)))
+                if img_dir:
+                    iv_path = os.path.join(img_dir, sanitize_filename(villager),
+                                           sanitize_filename(hit["name"]) + '.png')
+                    os.makedirs(os.path.dirname(iv_path), exist_ok=True)
+                    with open(iv_path, 'wb') as ivf:
+                        ivf.write(icon)
+                    db.execute("INSERT OR REPLACE INTO house_item_images VALUES (?,?,?)",
+                               (villager, hit["name"],
+                                f'/img/{sanitize_filename(villager)}/{sanitize_filename(hit["name"])}.png'))
+                else:
+                    db.execute("INSERT OR REPLACE INTO house_item_images VALUES (?,?,?)",
+                               (villager, hit["name"], sqlite3.Binary(icon)))
                 # Backfill the generic images table with the exact icon so gift
                 # suggestions also get it (fixes names the pattern-guesser misses,
                 # e.g. cream and sugar -> Cream_%26_Sugar on the wiki).
                 var_raw = (hit.get("var_raw") or "").strip().lower()
                 back_var = house_variation_from_url(url) if var_raw in ("", "na", "none") else hit["var_raw"]
-                db.execute("INSERT OR REPLACE INTO images VALUES (?,?,?,?,?)",
-                           (hit["category"], hit["name"], back_var,
-                            sqlite3.Binary(icon), url))
+                if img_dir:
+                    back_img_fn = sanitize_filename(hit["name"]) + (f'_{sanitize_filename(back_var)}' if back_var else '') + '.png'
+                    back_url = f'/img/{sanitize_filename(hit["category"])}/{back_img_fn}'
+                    db.execute("INSERT OR REPLACE INTO images VALUES (?,?,?,?)",
+                               (hit["category"], hit["name"], back_var, back_url))
+                else:
+                    db.execute("INSERT OR REPLACE INTO images VALUES (?,?,?,?,?)",
+                               (hit["category"], hit["name"], back_var,
+                                sqlite3.Binary(icon), url))
             for kind, field in (("interior", "interior_image_url"),
                                 ("exterior", "exterior_image_url")):
                 url = t.get(field)
@@ -473,8 +499,18 @@ def build_house_data(db, sheets, no_images):
                 except Exception:
                     continue
                 if data:
-                    db.execute("INSERT OR REPLACE INTO house_images VALUES (?,?,?)",
-                               (villager, kind, sqlite3.Binary(data)))
+                    if img_dir:
+                        hp_path = os.path.join(img_dir, sanitize_filename(villager),
+                                               kind + '.png')
+                        os.makedirs(os.path.dirname(hp_path), exist_ok=True)
+                        with open(hp_path, 'wb') as hpf:
+                            hpf.write(data)
+                        db.execute("INSERT OR REPLACE INTO house_images VALUES (?,?,?)",
+                                   (villager, kind,
+                                    f'/img/{sanitize_filename(villager)}/{kind}.png'))
+                    else:
+                        db.execute("INSERT OR REPLACE INTO house_images VALUES (?,?,?)",
+                                   (villager, kind, sqlite3.Binary(data)))
         n_villagers += 1
     print(f"    {n_villagers} villagers, {n_items} house items resolved")
 
@@ -510,6 +546,9 @@ def main():
     # reference db (and never blanks the served .gz that clients are using).
     out_db_tmp = OUT_DB + ".tmp"
     out_gz_tmp = OUT_GZ + ".tmp"
+    img_dir = os.path.join(os.path.dirname(OUT_DB), 'img') if not no_images else None
+    if img_dir:
+        os.makedirs(img_dir, exist_ok=True)
     if os.path.exists(out_db_tmp):
         os.remove(out_db_tmp)
     db = sqlite3.connect(out_db_tmp)
@@ -523,7 +562,7 @@ def main():
     db.execute("CREATE TABLE items (name TEXT, category TEXT, variation TEXT, style TEXT,"
                " color1 TEXT, color2 TEXT, buy TEXT, sell TEXT, source TEXT, label_themes TEXT,"
                " type_path TEXT)")
-    db.execute("CREATE TABLE images (category TEXT, name TEXT, variation TEXT, data BLOB,"
+    db.execute("CREATE TABLE images (category TEXT, name TEXT, variation TEXT,"
                " url TEXT, PRIMARY KEY (category, name, variation))")
 
     sheet_tables = {}
@@ -570,9 +609,10 @@ def main():
     print(f"    items: {n_items} rows")
 
     # per-villager house data (exact furniture colors + interior/exterior photos)
-    build_house_data(db, sheets, no_images)
+    build_house_data(db, sheets, no_images, img_dir=img_dir)
 
     # images
+    image_urls = []
     if not no_images:
         print("[3/4] fetching images ...")
         for d in (CACHE_DIR, IMAGES_RAW, IMAGES_THUMB):
@@ -675,8 +715,19 @@ def main():
                 stats[cat][1] += 1
                 if data:
                     stats[cat][0] += 1
-                    db.execute("INSERT OR REPLACE INTO images VALUES (?,?,?,?,?)",
-                               (cat, name, var, sqlite3.Binary(data), fn))
+                    if img_dir:
+                        img_fn = sanitize_filename(name) + (f'_{sanitize_filename(var)}' if var else '') + '.png'
+                        img_path = os.path.join(img_dir, sanitize_filename(cat), img_fn)
+                        os.makedirs(os.path.dirname(img_path), exist_ok=True)
+                        with open(img_path, 'wb') as imgf:
+                            imgf.write(data)
+                        url = f'/img/{sanitize_filename(cat)}/{img_fn}'
+                        image_urls.append(url)
+                        db.execute("INSERT OR REPLACE INTO images VALUES (?,?,?,?)",
+                                   (cat, name, var, url))
+                    else:
+                        db.execute("INSERT OR REPLACE INTO images VALUES (?,?,?,?,?)",
+                                   (cat, name, var, sqlite3.Binary(data), fn))
                 else:
                     misses.append((cat, name, var))
                 n_done += 1
@@ -695,7 +746,45 @@ def main():
     else:
         print("[3/4] skipping images (--no-images)")
 
+    # Generate image manifest
+    img_manifest_path = None
+    image_hash = ''
+    if img_dir and image_urls:
+        image_urls.sort()
+        image_hash = hashlib.sha256('\n'.join(image_urls).encode()).hexdigest()
+        img_manifest_path = os.path.join(img_dir, 'manifest.json')
+        manifest_tmp = img_manifest_path + '.tmp'
+        with open(manifest_tmp, 'w') as f:
+            json.dump({'hash': image_hash, 'count': len(image_urls),
+                       'urls': image_urls}, f)
+        os.replace(manifest_tmp, img_manifest_path)
+        print(f"    img manifest: {len(image_urls)} urls, hash={image_hash[:12]}…")
+
+    # Strip image BLOBs from the DB (images are now files on disk)
+    if img_dir:
+        db.execute("CREATE TABLE images_new (category TEXT, name TEXT,"
+                   " variation TEXT, url TEXT,"
+                   " PRIMARY KEY (category, name, variation))")
+        db.execute("INSERT INTO images_new SELECT category, name, variation, url FROM images")
+        db.execute("DROP TABLE images")
+        db.execute("ALTER TABLE images_new RENAME TO images")
+        db.execute("CREATE TABLE hi_new (villager TEXT, name TEXT, url TEXT,"
+                   " PRIMARY KEY (villager, name))")
+        db.execute("INSERT INTO hi_new SELECT villager, name, url FROM house_item_images")
+        db.execute("DROP TABLE house_item_images")
+        db.execute("ALTER TABLE hi_new RENAME TO house_item_images")
+        db.execute("CREATE TABLE hp_new (villager TEXT, kind TEXT, url TEXT,"
+                   " PRIMARY KEY (villager, kind))")
+        db.execute("INSERT INTO hp_new SELECT villager, kind, url FROM house_images")
+        db.execute("DROP TABLE house_images")
+        db.execute("ALTER TABLE hp_new RENAME TO house_images")
+        db.execute("VACUUM")
+
     print(f"[4/4] writing db + gz ...")
+    # Store imageHash in the meta table for the client manifest
+    if image_hash:
+        db.execute("INSERT OR REPLACE INTO meta VALUES (?, ?)",
+                   ('image_hash', image_hash))
     db.commit()
     db.close()
     raw = os.path.getsize(out_db_tmp)
@@ -709,6 +798,11 @@ def main():
     print(f"\nDone.")
     print(f"  reference.db       : {raw/1e6:.1f} MB")
     print(f"  reference.v1.db.gz : {gz/1e6:.1f} MB")
+    if img_dir:
+        img_count = sum(1 for _ in os.walk(img_dir) for f in _[2] if f.endswith('.png'))
+        img_bytes = sum(os.path.getsize(os.path.join(d, f))
+                        for d, _, files in os.walk(img_dir) for f in files if f.endswith('.png'))
+        print(f"  img/               : {img_count} files, {img_bytes/1e6:.1f} MB")
     if thumb:
         print(f"  (images downscaled to max {thumb}px)")
 

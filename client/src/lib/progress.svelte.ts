@@ -127,6 +127,10 @@ export function toggleGifted(villager: string, item: string): void {
   scheduleSave();
 }
 
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
+let retryCount = 0;
+const MAX_RETRY_DELAY = 30000;
+
 /** Upload the user's progress db to the server — the single backup file. */
 export async function saveProgress(): Promise<void> {
   const db = state.db;
@@ -137,8 +141,18 @@ export async function saveProgress(): Promise<void> {
     await progressUpload(db.export());
     state.dirty = false;
     state.savedAt = new Date().toLocaleTimeString();
+    retryCount = 0;
   } catch (e) {
     state.error = e instanceof Error ? e.message : 'save failed';
+    // Schedule retry with exponential backoff
+    retryCount++;
+    const delay = Math.min(1000 * Math.pow(2, retryCount - 1), MAX_RETRY_DELAY);
+    if (retryTimer) clearTimeout(retryTimer);
+    retryTimer = setTimeout(() => {
+      retryTimer = null;
+      state.dirty = true; // mark so the badge shows correctly
+      void saveProgress();
+    }, delay);
   } finally {
     state.saving = false;
   }

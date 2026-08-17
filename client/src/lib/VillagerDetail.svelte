@@ -1,14 +1,13 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte';
   import { getRefDbState } from './refdb.svelte';
-  import { villagerByName, villagerImage, type VillagerRow } from './villagers';
+  import { villagerByName, villagerImageUrl, type VillagerRow } from './villagers';
   import {
     giftIdeasByGroup,
-    giftImagesForGroup,
+    giftImageUrls,
     houseItems,
     houseItemsDetailed,
-    houseImages,
-    housePhotos,
+    houseImageUrls,
+    housePhotoUrls,
     type GiftGroup,
     type GiftIdea,
     type HouseItemDetail,
@@ -24,13 +23,10 @@
   let imgUrl: string | null = $state(null);
   let groups: GiftGroup[] = $state([]);
   let house = $state<Map<string, HouseItemDetail>>(new Map());
-  let houseImgs = $state(new Map<string, Uint8Array<ArrayBuffer>>());
-  let housePhotosBytes = $state({ interior: null as Uint8Array<ArrayBuffer> | null, exterior: null as Uint8Array<ArrayBuffer> | null });
+  let houseImgs = $state(new Map<string, string>());
+  let housePhotosData = $state({ interior: null as string | null, exterior: null as string | null });
   let showAll = $state<Record<string, boolean>>({});
-  let groupImages = $state(new Map<string, Map<string, Uint8Array<ArrayBuffer>>>());
-  // Non-reactive: revoking/creating inside the effect must not re-trigger it.
-  let createdUrl: string | null = null;
-  const urlCache = new Map<string, string>();
+  let groupImages = $state(new Map<string, Map<string, string>>());
 
   const VISIBLE = 20;
 
@@ -57,41 +53,17 @@
     const byName = groupImages.get(groupKey);
     if (!byName) return null;
     const key = `${idea.name}\u0000${idea.variation}`;
-    const bytes = byName.get(key) ?? byName.get(`${idea.name}\u0000`);
-    if (!bytes) return null;
-    const cacheKey = `${groupKey}|${key}`;
-    let url = urlCache.get(cacheKey);
-    if (!url) {
-      url = URL.createObjectURL(new Blob([bytes]));
-      urlCache.set(cacheKey, url);
-    }
-    return url;
+    return byName.get(key) ?? byName.get(`${idea.name}\u0000`) ?? null;
   }
 
   const fmt = (n: number) => n.toLocaleString();
 
-  const houseUrlCache = new Map<string, string>();
   function houseImgUrl(name: string): string | null {
-    const bytes = houseImgs.get(name);
-    if (!bytes) return null;
-    let url = houseUrlCache.get(name);
-    if (!url) {
-      url = URL.createObjectURL(new Blob([bytes]));
-      houseUrlCache.set(name, url);
-    }
-    return url;
+    return houseImgs.get(name) ?? null;
   }
 
-  const housePhotoUrlCache = new Map<string, string>();
   function housePhotoUrl(kind: 'interior' | 'exterior'): string | null {
-    const bytes = housePhotosBytes[kind];
-    if (!bytes) return null;
-    let url = housePhotoUrlCache.get(kind);
-    if (!url) {
-      url = URL.createObjectURL(new Blob([bytes]));
-      housePhotoUrlCache.set(kind, url);
-    }
-    return url;
+    return housePhotosData[kind];
   }
 
   // Gift log state for this villager (reads progress.version so toggles re-render).
@@ -107,10 +79,7 @@
     const db = refdb.db;
     if (!db) return;
     villager = villagerByName(db, name);
-    const bytes = villagerImage(db, name);
-    if (createdUrl) URL.revokeObjectURL(createdUrl);
-    createdUrl = bytes ? URL.createObjectURL(new Blob([bytes])) : null;
-    imgUrl = createdUrl;
+    imgUrl = villagerImageUrl(db, name);
   });
 
   // Reads villager, writes only groups/house (no self-loop).
@@ -121,8 +90,8 @@
     groups = giftIdeasByGroup(db, villager);
     const names = houseItems(villager);
     house = houseItemsDetailed(db, villager.name, names);
-    houseImgs = houseImages(db, villager.name, names);
-    housePhotosBytes = housePhotos(db, villager.name);
+    houseImgs = houseImageUrls(db, villager.name, names);
+    housePhotosData = housePhotoUrls(db, villager.name);
   });
 
   // Load thumbnails for the currently visible items per group (reads filter
@@ -131,10 +100,10 @@
     if (!groups.length) return;
     const db = refdb.db;
     if (!db) return;
-    const next = new Map<string, Map<string, Uint8Array<ArrayBuffer>>>();
+    const next = new Map<string, Map<string, string>>();
     for (const g of groups) {
       const names = [...new Set(visibleItems(g).map((i) => i.name))];
-      next.set(g.key, giftImagesForGroup(db, g, names));
+      next.set(g.key, giftImageUrls(db, g, names));
     }
     groupImages = next;
   });
@@ -151,15 +120,7 @@
     return out;
   });
 
-  onDestroy(() => {
-    for (const url of urlCache.values()) URL.revokeObjectURL(url);
-    urlCache.clear();
-    for (const url of houseUrlCache.values()) URL.revokeObjectURL(url);
-    houseUrlCache.clear();
-    for (const url of housePhotoUrlCache.values()) URL.revokeObjectURL(url);
-    housePhotoUrlCache.clear();
-    if (createdUrl) URL.revokeObjectURL(createdUrl);
-  });
+
 </script>
 
 <div class="min-h-screen bg-green-50">

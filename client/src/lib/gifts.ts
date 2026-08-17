@@ -116,26 +116,26 @@ export function giftIdeasByGroup(db: Database, villager: VillagerRow): GiftGroup
   return out;
 }
 
-/** Image bytes for the given item names in a group (category + name + variation). */
-export function giftImagesForGroup(
+/** Image URLs for the given item names in a group (category + name + variation). */
+export function giftImageUrls(
   db: Database,
   group: GiftGroup,
   names: string[],
-): Map<string, Uint8Array<ArrayBuffer>> {
-  const out = new Map<string, Uint8Array<ArrayBuffer>>();
+): Map<string, string> {
+  const out = new Map<string, string>();
   if (names.length === 0) return out;
   const catPh = group.categories.map(() => '?').join(',');
   const namePh = names.map(() => '?').join(',');
   const res = db.exec(
-    `SELECT name, variation, data FROM images
+    `SELECT name, variation, url FROM images
      WHERE category IN (${catPh}) AND name IN (${namePh})`,
     [...group.categories, ...names],
   );
   if (!res.length) return out;
   for (const row of res[0].values) {
-    const [name, variation, data] = row;
-    if (typeof name === 'string' && data instanceof Uint8Array) {
-      out.set(`${name}\u0000${typeof variation === 'string' ? variation : ''}`, data);
+    const [name, variation, url] = row;
+    if (typeof name === 'string' && typeof url === 'string' && url) {
+      out.set(`${name}\u0000${typeof variation === 'string' ? variation : ''}`, url);
     }
   }
   return out;
@@ -245,53 +245,53 @@ export function houseItemsDetailed(
   return out;
 }
 
-/** Full-quality interior/exterior photos of the villager's original house. */
-export function housePhotos(
+/** Full-quality interior/exterior photo URLs of the villager's original house. */
+export function housePhotoUrls(
   db: Database,
   villagerName: string,
-): { interior: Uint8Array<ArrayBuffer> | null; exterior: Uint8Array<ArrayBuffer> | null } {
-  const out: { interior: Uint8Array<ArrayBuffer> | null; exterior: Uint8Array<ArrayBuffer> | null } = {
+): { interior: string | null; exterior: string | null } {
+  const out: { interior: string | null; exterior: string | null } = {
     interior: null,
     exterior: null,
   };
   if (!hasHouseTables(db)) return out;
-  const res = db.exec('SELECT kind, data FROM house_images WHERE lower(villager) = ?', [
+  const res = db.exec('SELECT kind, url FROM house_images WHERE lower(villager) = ?', [
     villagerName.toLowerCase(),
   ]);
   if (res.length) {
-    for (const [kind, data] of res[0].values) {
-      if ((kind === 'interior' || kind === 'exterior') && data instanceof Uint8Array) {
-        out[kind] = data as Uint8Array<ArrayBuffer>;
+    for (const [kind, url] of res[0].values) {
+      if ((kind === 'interior' || kind === 'exterior') && typeof url === 'string' && url) {
+        out[kind] = url;
       }
     }
   }
   return out;
 }
 
-/** Image bytes for house items, keyed by display name. Prefers the exact
+/** Image URLs for house items, keyed by display name. Prefers the exact
  *  per-villager icon from the build-time `house_item_images` table (nh_house —
  *  includes clothing like chef's outfit, which the furniture-only query below
  *  would skip); falls back to the generic images table. */
-export function houseImages(
+export function houseImageUrls(
   db: Database,
   villagerName: string,
   names: string[],
-): Map<string, Uint8Array<ArrayBuffer>> {
-  const out = new Map<string, Uint8Array<ArrayBuffer>>();
+): Map<string, string> {
+  const out = new Map<string, string>();
   if (!names.length) return out;
   let found = new Set<string>();
   try {
     const namePh = names.map(() => '?').join(',');
     const res = db.exec(
-      `SELECT name, data FROM house_item_images WHERE lower(villager) = ? AND lower(name) IN (${namePh})`,
+      `SELECT name, url FROM house_item_images WHERE lower(villager) = ? AND lower(name) IN (${namePh})`,
       [villagerName.toLowerCase(), ...names.map((n) => n.toLowerCase())],
     );
     if (res.length) {
-      for (const [dbName, data] of res[0].values) {
-        if (typeof dbName !== 'string' || !(data instanceof Uint8Array)) continue;
+      for (const [dbName, url] of res[0].values) {
+        if (typeof dbName !== 'string' || typeof url !== 'string' || !url) continue;
         const match = names.find((n) => n.toLowerCase() === dbName.toLowerCase());
         if (match) {
-          out.set(match, data as Uint8Array<ArrayBuffer>);
+          out.set(match, url);
           found.add(match.toLowerCase());
         }
       }
@@ -303,25 +303,25 @@ export function houseImages(
   if (!missing.length) return out;
   const namePh = missing.map(() => '?').join(',');
   const res = db.exec(
-    `SELECT name, variation, data FROM images
+    `SELECT name, variation, url FROM images
      WHERE lower(name) IN (${namePh}) AND category IN (${FURNITURE_PH})`,
     [...missing.map((n) => n.toLowerCase()), ...FURNITURE_CATS],
   );
   if (!res.length) return out;
-  const best = new Map<string, { variation: string; data: Uint8Array<ArrayBuffer> }>();
+  const best = new Map<string, { variation: string; url: string }>();
   for (const row of res[0].values) {
-    const [dbName, variation, data] = row;
-    if (typeof dbName !== 'string' || !(data instanceof Uint8Array)) continue;
+    const [dbName, variation, url] = row;
+    if (typeof dbName !== 'string' || typeof url !== 'string' || !url) continue;
     const key = dbName.toLowerCase();
     const varStr = typeof variation === 'string' ? variation : '';
     const existing = best.get(key);
     if (!existing || (varStr === '' && existing.variation !== '')) {
-      best.set(key, { variation: varStr, data: data as Uint8Array<ArrayBuffer> });
+      best.set(key, { variation: varStr, url });
     }
   }
   for (const name of missing) {
     const hit = best.get(name.toLowerCase());
-    if (hit) out.set(name, hit.data);
+    if (hit) out.set(name, hit.url);
   }
   return out;
 }

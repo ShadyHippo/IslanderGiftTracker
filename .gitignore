@@ -5,6 +5,9 @@ cache/
 images-missed.txt
 build.log
 
+# --- Pristine full-data backup (never trimmed; restore point, see AGENTS.md) ---
+pristine/
+
 # --- Server runtime data: secrets + user data, never commit ---
 server/data/
 server/bin/

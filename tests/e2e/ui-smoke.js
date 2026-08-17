@@ -137,9 +137,9 @@ try {
   console.log('PASS: gift groups render with counts');
 
   // Expand Furniture -> items render with thumbnails (all items are perfect)
-  await page.click('summary:has-text("Furniture")');
+  await page.click('section:has-text("Gift ideas") summary:has-text("Furniture")');
   await page.waitForSelector('li img', { timeout: 10000 });
-  const furnitureRows = await page.locator('details:has(summary:has-text("Furniture")) li').count();
+  const furnitureRows = await page.locator('section:has-text("Gift ideas") details:has(summary:has-text("Furniture")) li').count();
   if (!furnitureRows) {
     console.error('FAIL: no items in expanded Furniture group');
     process.exit(1);
@@ -147,7 +147,7 @@ try {
   console.log(`PASS: Furniture group expands (${furnitureRows} items, thumbnails render)`);
 
   // Gift ideas search: matches names across the group, restores when cleared
-  const furn = page.locator('details:has(summary:has-text("Furniture"))');
+  const furn = page.locator('section:has-text("Gift ideas") details:has(summary:has-text("Furniture"))');
   const full = await furn.locator('li').count();
   const firstItemName = (((await furn.locator('li p.font-medium').first().textContent()) ?? '').trim().split(' (')[0]).trim();
   if (!firstItemName) {
@@ -236,6 +236,23 @@ try {
   await page.goto(`${base}/villager/Agent%20S`, { waitUntil: 'domcontentloaded', timeout: 30000 });
   await page.waitForSelector('text=Agent S', { timeout: 30000 });
   console.log('PASS: deep link with encoded space (Agent S) renders');
+
+  // A plain refresh must reuse the IndexedDB-cached reference db — the only
+  // network requests for /db/reference* happen when the cache is (wrongly)
+  // invalidated. Counts actual requests so it cannot race past a quick
+  // localhost download.
+  let dbRequests = 0;
+  page.on('request', (req) => {
+    if (req.url().includes('/db/reference')) dbRequests++;
+  });
+  await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 });
+  await page.waitForSelector('text=Agent S', { timeout: 30000 });
+  await page.waitForTimeout(3000);
+  if (dbRequests > 0) {
+    console.error(`FAIL: a plain refresh re-downloaded the reference db (${dbRequests} request(s))`);
+    process.exit(1);
+  }
+  console.log('PASS: refresh reuses the cached reference db (no re-download)');
 
   await page.screenshot({ path: '/e2e/smoke.png', fullPage: false });
   console.log('screenshot -> tests/e2e/smoke.png');

@@ -358,38 +358,47 @@
               loading="lazy"
             />
           {/if}
-          <ul class="divide-y divide-green-100">
-            {#each [...house.values()] as item (item.name)}
-              {@const img = houseImgUrl(item.name)}
-              <li class="flex items-start gap-3 py-2.5">
-                {#if img}
-                  <img
-                    src={img}
-                    alt={item.name}
-                    class="h-12 w-12 shrink-0 rounded-lg object-cover"
-                    loading="lazy"
-                  />
-                {:else}
-                  <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-green-100 text-green-600">
-                    {item.name.charAt(0).toUpperCase()}
-                  </span>
-                {/if}
-                <div class="min-w-0 flex-1">
-                  <p class="font-medium text-green-900">{item.name}</p>
-                  {#if item.category}
-                    <p class="text-xs text-green-600">{item.category}</p>
+          <details open class="group mt-3 rounded-xl border border-green-200">
+            <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+              <span class="flex items-baseline gap-2">
+                <span class="font-semibold text-green-900">House furniture</span>
+                <span class="text-xs text-green-600">{house.size}</span>
+              </span>
+              <span class="text-green-400 transition-transform group-open:rotate-90">›</span>
+            </summary>
+            <ul class="divide-y divide-green-100 border-t border-green-100">
+              {#each [...house.values()] as item (item.name)}
+                {@const img = houseImgUrl(item.name)}
+                <li class="flex items-start gap-3 px-4 py-2.5">
+                  {#if img}
+                    <img
+                      src={img}
+                      alt={item.name}
+                      class="h-12 w-12 shrink-0 rounded-lg object-cover"
+                      loading="lazy"
+                    />
+                  {:else}
+                    <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-green-100 text-green-600">
+                      {item.name.charAt(0).toUpperCase()}
+                    </span>
                   {/if}
-                </div>
-                {#if item.colors.length > 0}
-                  <div class="flex shrink-0 flex-wrap justify-end gap-1">
-                    {#each item.colors as c}
-                      <span class="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-800">♥ {c}</span>
-                    {/each}
+                  <div class="min-w-0 flex-1">
+                    <p class="font-medium text-green-900">{item.name}</p>
+                    {#if item.category}
+                      <p class="text-xs text-green-600">{item.category}</p>
+                    {/if}
                   </div>
-                {/if}
-              </li>
-            {/each}
-          </ul>
+                  {#if item.colors.length > 0}
+                    <div class="flex shrink-0 flex-wrap justify-end gap-1">
+                      {#each item.colors as c}
+                        <span class="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-800">♥ {c}</span>
+                      {/each}
+                    </div>
+                  {/if}
+                </li>
+              {/each}
+            </ul>
+          </details>
         </section>
       {/if}
 

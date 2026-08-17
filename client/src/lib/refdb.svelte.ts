@@ -41,29 +41,32 @@ function openIdb(): Promise<IDBDatabase> {
   });
 }
 
-async function idbGet(): Promise<{ version: number; bytes: ArrayBuffer } | null> {
-  const db = await openIdb();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(IDB_STORE, 'readonly');
-    const req = tx.objectStore(IDB_STORE).get(IDB_KEY);
-    req.onsuccess = () => resolve((req.result as { version: number; bytes: ArrayBuffer } | undefined) ?? null);
-    req.onerror = () => reject(req.error ?? new Error('indexeddb get failed'));
-    tx.oncomplete = () => db.close();
-  });
-}
+async function idbGet(): Promise<{ version: number; sha: string; bytes: ArrayBuffer } | null> {
+    const db = await openIdb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, 'readonly');
+      const req = tx.objectStore(IDB_STORE).get(IDB_KEY);
+      req.onsuccess = () => {
+        const r = req.result as { version?: number; sha?: string; bytes?: ArrayBuffer } | undefined;
+        resolve(r?.bytes ? { version: r.version ?? 0, sha: r.sha ?? '', bytes: r.bytes } : null);
+      };
+      req.onerror = () => reject(req.error ?? new Error('indexeddb get failed'));
+      tx.oncomplete = () => db.close();
+    });
+  }
 
-async function idbPut(version: number, bytes: ArrayBuffer): Promise<void> {
-  const db = await openIdb();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(IDB_STORE, 'readwrite');
-    tx.objectStore(IDB_STORE).put({ version, bytes }, IDB_KEY);
-    tx.oncomplete = () => {
-      db.close();
-      resolve();
-    };
-    tx.onerror = () => reject(tx.error ?? new Error('indexeddb put failed'));
-  });
-}
+  async function idbPut(version: number, sha: string, bytes: ArrayBuffer): Promise<void> {
+    const db = await openIdb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      tx.objectStore(IDB_STORE).put({ version, sha, bytes }, IDB_KEY);
+      tx.oncomplete = () => {
+        db.close();
+        resolve();
+      };
+      tx.onerror = () => reject(tx.error ?? new Error('indexeddb put failed'));
+    });
+  }
 
 async function fetchManifest(): Promise<RefManifest> {
   const res = await fetch('/db/manifest.json', { cache: 'no-store' });
@@ -130,7 +133,12 @@ export async function loadReferenceDb(): Promise<void> {
 
     const cached = await idbGet();
     let gz: ArrayBuffer;
-    if (cached && cached.version === manifest.latest && (await sha256Hex(cached.bytes)) === entry.sha256) {
+    // Cache hit: version match AND the sha we stored next to the bytes matches
+    // the manifest. We do NOT re-hash the cached bytes here — crypto.subtle
+    // only exists in secure contexts (https/localhost), so on plain http LAN/
+    // Tailscale URLs it is unavailable and an empty hash would always fail the
+    // comparison, forcing a 620 MB re-download on every refresh.
+    if (cached && cached.version === manifest.latest && cached.sha === entry.sha256) {
       gz = cached.bytes;
     } else {
       gz = await download(`/db/${entry.file}`, (f) => {
@@ -142,7 +150,10 @@ export async function loadReferenceDb(): Promise<void> {
           `reference db checksum mismatch: expected ${entry.sha256.slice(0, 12)}…, got ${sum.slice(0, 12)}…`,
         );
       }
-      await idbPut(manifest.latest, gz);
+      // On insecure contexts we can't compute a sha to verify, so trust the
+      // manifest's checksum and store it verbatim (the checksum is still the
+      // key that decides cache hits on the next load).
+      await idbPut(manifest.latest, sum || entry.sha256, gz);
     }
 
     state.status = 'initializing';

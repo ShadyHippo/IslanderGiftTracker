@@ -26,9 +26,7 @@ const progressTemplate = `CREATE TABLE IF NOT EXISTS gifts (
 	date TEXT NOT NULL,
 	note TEXT,
 	created_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
-INSERT OR IGNORE INTO meta (key, value) VALUES ('schema_version', '1');`
+);`
 
 func (s *server) progressPath(username string) string {
 	return filepath.Join(s.progDir, username+".db")
@@ -172,7 +170,9 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer out.Close()
-	_, err = io.Copy(out, in)
-	return err
+	if _, err = io.Copy(out, in); err != nil {
+		out.Close()
+		return err
+	}
+	return out.Close()
 }

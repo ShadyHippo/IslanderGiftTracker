@@ -50,9 +50,6 @@ NAME_COL_TWO = {"Insects", "Fish", "Sea Creatures", "Reactions"}
 # sheets with no images to fetch (nothing exists on the wiki for them)
 NO_IMAGE_SHEETS = {"Read Me", "Seasons and Events", "Paradise Planning"}
 
-# column names captured into the flattened `items` table
-ITEM_COLS = {"Name", "Variation", "Style", "Color 1", "Color 2", "Buy", "Sell", "Source"}
-
 # filename pattern priority per category (title-cased name substituted for {n})
 PATTERNS = {
     "Villagers":      ["{n}_NH_Villager_Icon.png", "{n}_NH_Icon.png", "{n}_NH_Texture.png", "{n}_NH.png"],
@@ -101,7 +98,6 @@ def maybe_thumb(fn, data):
         with open(p, "wb") as f:
             f.write(t)
     return t
-    return data
 
 
 # ---------------------------------------------------------------- xlsx parsing
@@ -204,19 +200,6 @@ def try_fetch(fname):
             # dodo.ac must not kill the whole build.
             return None
     return None
-
-
-def fetch_image_bytes(fname, cache_dir):
-    """Fetch fname from dodo.ac (disk-cached). Returns bytes or None."""
-    p = os.path.join(cache_dir, fname)
-    if os.path.exists(p):
-        with open(p, "rb") as f:
-            return f.read()
-    data = try_fetch(fname)
-    if data:
-        with open(p, "wb") as f:
-            f.write(data)
-    return data
 
 
 def wiki_pageimages(title):
@@ -641,6 +624,17 @@ def main():
             pats = PATTERNS.get(cat, PATTERNS["default"])
             vpats = (["{n}_({v})_NH_Icon.png", "{n}_({v})_NH_Texture.png", "{n}_({v})_NH.png"]
                      if var else [])
+
+            def get_or_fetch(fn):
+                """Return cached bytes for fn, or fetch+cache from dodo.ac."""
+                data = get_cache_bytes(fn)
+                if data is None:
+                    data = try_fetch(fn)
+                    if data:
+                        with open(os.path.join(CACHE_DIR, fn), "wb") as f:
+                            f.write(data)
+                return data
+
             # Exact variation icons FIRST (e.g. Soft-Serve_Lamp_(Strawberry_Swirl))
             # — the base icon exists for most items and must not shadow them.
             if vpats:
@@ -648,12 +642,7 @@ def main():
                 for base in dict.fromkeys(bases):
                     for pat in vpats:
                         fn = pat.format(n=base, v=v)
-                        data = get_cache_bytes(fn)
-                        if data is None:
-                            data = try_fetch(fn)
-                            if data:
-                                with open(os.path.join(CACHE_DIR, fn), "wb") as f:
-                                    f.write(data)
+                        data = get_or_fetch(fn)
                         if data:
                             data = maybe_thumb(fn, data)
                         if data:
@@ -661,12 +650,7 @@ def main():
             for base in dict.fromkeys(bases):
                 for pat in pats:
                     fn = pat.format(n=base)
-                    data = get_cache_bytes(fn)
-                    if data is None:
-                        data = try_fetch(fn)
-                        if data:
-                            with open(os.path.join(CACHE_DIR, fn), "wb") as f:
-                                f.write(data)
+                    data = get_or_fetch(fn)
                     if data:
                         data = maybe_thumb(fn, data)
                     if data:

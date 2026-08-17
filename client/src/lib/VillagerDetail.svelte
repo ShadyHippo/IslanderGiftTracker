@@ -13,7 +13,7 @@
     type GiftIdea,
     type HouseItemDetail,
   } from './gifts';
-  import { getProgressState, giftedItems, toggleGifted, loadProgress } from './progress.svelte';
+  import { getProgressState, giftedItems, toggleGifted } from './progress.svelte';
   import { route, navigate } from './router';
 
   const refdb = getRefDbState();
@@ -111,11 +111,6 @@
     if (createdUrl) URL.revokeObjectURL(createdUrl);
     createdUrl = bytes ? URL.createObjectURL(new Blob([bytes])) : null;
     imgUrl = createdUrl;
-  });
-
-  // Load the user's gift log once the villager is on screen (idempotent).
-  $effect(() => {
-    if (villager && progress.status === 'idle') void loadProgress();
   });
 
   // Reads villager, writes only groups/house (no self-loop).

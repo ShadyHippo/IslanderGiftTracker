@@ -5,9 +5,7 @@ export interface GiftIdea {
   name: string;
   variation: string;
   category: string;
-  style: string;
   labelThemes: string;
-  colors: string[];
   /** matched favorite primary colors. */
   colorMatch: string[];
   /** matched favorite styles (clothing only). */
@@ -65,7 +63,7 @@ export function giftIdeasByGroup(db: Database, villager: VillagerRow): GiftGroup
 
   if (res.length) {
     for (const row of res[0].values) {
-      const [name, category, variation, style, color1, color2, labelThemes, buy, source, typePath] = row;
+      const [name, category, variation, style, color1, , labelThemes, buy, source, typePath] = row;
       if (typeof name !== 'string') continue;
       const groupKey = GIFT_GROUPS.find((g) => g.categories.includes(String(category)))?.key;
       if (!groupKey) continue;
@@ -82,14 +80,11 @@ export function giftIdeasByGroup(db: Database, villager: VillagerRow): GiftGroup
       if (isClothing ? !(colorMatch.length > 0 && styleMatch.length > 0) : colorMatch.length === 0) {
         continue;
       }
-      group.perfect++;
       group.items.push({
         name,
         variation: typeof variation === 'string' ? variation : '',
         category: String(category),
-        style: typeof style === 'string' ? style : '',
         labelThemes: typeof labelThemes === 'string' ? labelThemes : '',
-        colors: [color1, color2].filter(Boolean).map(String),
         colorMatch,
         styleMatch,
         buyable: typeof buy === 'string' && parseFloat(buy) > 0,
@@ -121,46 +116,6 @@ export function giftIdeasByGroup(db: Database, villager: VillagerRow): GiftGroup
   return out;
 }
 
-/**
- * Curated "top picks": perfect matches only, deduped by item name (best
- * variation wins: buyable over NFS), buyable first, then round-robined across
- * groups so the top list spans categories instead of stacking one type.
- */
-export function curatedPicks(groups: GiftGroup[], limit = 10): GiftIdea[] {
-  const queues: GiftIdea[][] = [];
-  for (const g of groups) {
-    const best = new Map<string, GiftIdea>();
-    for (const idea of g.items) {
-      const key = idea.name.toLowerCase();
-      const existing = best.get(key);
-      if (!existing || (idea.buyable && !existing.buyable)) {
-        best.set(key, idea);
-      }
-    }
-    queues.push(
-      [...best.values()].sort(
-        (a, b) => Number(b.buyable) - Number(a.buyable) || a.name.localeCompare(b.name),
-      ),
-    );
-  }
-  const out: GiftIdea[] = [];
-  let cursor = 0;
-  while (out.length < limit) {
-    let picked = false;
-    for (let k = 0; k < queues.length; k++) {
-      const q = queues[(cursor + k) % queues.length];
-      if (q.length > 0) {
-        out.push(q.shift()!);
-        picked = true;
-        break;
-      }
-    }
-    if (!picked) break;
-    cursor++;
-  }
-  return out;
-}
-
 /** Image bytes for the given item names in a group (category + name + variation). */
 export function giftImagesForGroup(
   db: Database,
@@ -184,53 +139,6 @@ export function giftImagesForGroup(
     }
   }
   return out;
-}
-
-export interface TypeNode {
-  /** full path, e.g. 'Kitchen/Appliance'. */
-  path: string;
-  label: string;
-  /** items under this node (including all descendants). */
-  count: number;
-  children: TypeNode[];
-}
-
-/**
- * Build the category tree from a group's items. Each item is counted at every
- * ancestor level, so a node's count = how many items selecting it would show.
- * `pathOf` maps an item to its path: furniture uses typePath (multi-level),
- * clothing uses the flat category (single level).
- */
-export function typeTree(
-  items: GiftIdea[],
-  pathOf: (i: GiftIdea) => string = (i) => i.typePath,
-): TypeNode[] {
-  const counts = new Map<string, number>();
-  for (const idea of items) {
-    const parts = pathOf(idea)
-      .split('/')
-      .map((s) => s.trim())
-      .filter(Boolean);
-    let acc = '';
-    for (const part of parts) {
-      acc = acc ? `${acc}/${part}` : part;
-      counts.set(acc, (counts.get(acc) ?? 0) + 1);
-    }
-  }
-  const nodes = new Map<string, TypeNode>();
-  for (const [path, count] of counts) {
-    nodes.set(path, { path, label: path.split('/').pop()!, count, children: [] });
-  }
-  const tree: TypeNode[] = [];
-  for (const node of nodes.values()) {
-    const i = node.path.lastIndexOf('/');
-    if (i === -1) tree.push(node);
-    else nodes.get(node.path.slice(0, i))!.children.push(node);
-  }
-  const byLabel = (a: TypeNode, b: TypeNode) => a.label.localeCompare(b.label);
-  tree.sort(byLabel);
-  for (const node of nodes.values()) node.children.sort(byLabel);
-  return tree;
 }
 
 /** Items that are in the villager's house (furniture_name_list, lowercase names). */

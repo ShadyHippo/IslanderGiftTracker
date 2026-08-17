@@ -7,7 +7,6 @@
     allVillagerFlags,
     toggleFavorite,
     toggleOnIsland,
-    loadProgress,
     type VillagerFlags,
   } from './progress.svelte';
   import { logout } from './session.svelte';
@@ -31,11 +30,6 @@
       villagers = allVillagers(db);
       images = villagerImages(db);
     }
-  });
-
-  // Load the user's gift log / flags once (idempotent).
-  $effect(() => {
-    if (refdb.status === 'ready' && progress.status === 'idle') void loadProgress();
   });
 
   const flags = $derived.by(() => {

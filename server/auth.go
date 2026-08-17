@@ -84,7 +84,9 @@ func upsertUser(db *sql.DB, username, password string) error {
 		return err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return createUser(db, username, password)
+		_, err = db.Exec("INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)",
+			username, hash, time.Now().UTC().Format(time.RFC3339))
+		return err
 	}
 	return nil
 }
@@ -189,7 +191,7 @@ func (s *sessionStore) remove(tok string) {
 	delete(s.sessions, tok)
 }
 
-func (s *server) sessionCookie(w http.ResponseWriter, tok string) {
+func (s *server) setSessionCookie(w http.ResponseWriter, tok string) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookie,
 		Value:    tok,
@@ -253,7 +255,7 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
 		return
 	}
-	s.sessionCookie(w, tok)
+	s.setSessionCookie(w, tok)
 	log.Printf("login ok user=%q ip=%s", canonical, ip)
 	writeJSON(w, http.StatusOK, map[string]string{"username": canonical})
 }

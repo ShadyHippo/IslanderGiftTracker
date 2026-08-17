@@ -23,14 +23,14 @@ type refEntry struct {
 }
 
 // manifestCache memoizes hashes per (file, mtime, size) so we never re-hash the
-// ~750 MB reference file more than once per change.
+// reference file more than once per change.
 type manifestCache struct {
-	mu     sync.Mutex
-	key    string
-	hashes map[string]string // filename -> sha256
+	mu    sync.Mutex
+	keys  map[string]string // file path -> composite key (mtime+size)
+	hashes map[string]string // file path -> sha256
 }
 
-var mcache = &manifestCache{hashes: map[string]string{}}
+var mcache = &manifestCache{keys: map[string]string{}, hashes: map[string]string{}}
 
 func (s *server) referenceEntries() ([]refEntry, error) {
 	matches, err := filepath.Glob(filepath.Join(s.refDir, "reference.*.db.gz"))
@@ -62,15 +62,16 @@ func (s *server) fileHash(path string, st os.FileInfo) string {
 	key := path + "|" + st.ModTime().UTC().String() + "|" + strconv.FormatInt(st.Size(), 10)
 	mcache.mu.Lock()
 	defer mcache.mu.Unlock()
-	if mcache.key != key {
-		h := sha256.New()
-		if f, err := os.Open(path); err == nil {
-			if _, err := io.Copy(h, f); err == nil {
-				mcache.hashes = map[string]string{path: hex.EncodeToString(h.Sum(nil))}
-				mcache.key = key
-			}
-			f.Close()
+	if mcache.keys[path] == key {
+		return mcache.hashes[path]
+	}
+	h := sha256.New()
+	if f, err := os.Open(path); err == nil {
+		if _, err := io.Copy(h, f); err == nil {
+			mcache.hashes[path] = hex.EncodeToString(h.Sum(nil))
+			mcache.keys[path] = key
 		}
+		f.Close()
 	}
 	return mcache.hashes[path]
 }

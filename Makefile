@@ -1,4 +1,4 @@
-.PHONY: build-db server server-run server-build client-install client-dev client-build docker
+.PHONY: build-db server-run server-build client-install client-dev client-build docker
 
 # Rebuild the reference database from the xlsx (+ dodo.ac images)
 build-db:
@@ -47,7 +47,7 @@ docker:
 	docker build -t acnh-server server/deploy
 
 # Categories that need images: everything the gift matcher shows + villager
-# icons. Pass explicitly — the default (all sheets) balloons the db to 253 MB.
+# icons. Pass explicitly — the default (all sheets) balloons the db significantly.
 REF_CATEGORIES = Accessories,Artwork,Bags,Bottoms,Ceiling Decor,Clothing Other,Dress-Up,Fencing,Fish,Floors,Fossils,Gyroids,Headwear,Housewares,Insects,Interior Structures,Miscellaneous,Music,Other,Rugs,Sea Creatures,Shoes,Socks,ToolsGoods,Tops,Umbrellas,Villagers,Wall-mounted,Wallpaper
 
 # --- Local full-stack app (docker-compose.dev.yml) ---

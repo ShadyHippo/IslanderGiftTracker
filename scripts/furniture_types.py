@@ -820,10 +820,6 @@ def classify(name):
                 return (*path, leaf)
     return tuple(path)
 
-def type_for(name):
-    """Backward-compat: top-level category only."""
-    return classify(name)[0]
-
 OVERRIDES = {k.lower(): v for k, v in OVERRIDES.items()}
 
 # ---- 2026-08 restructure: 15 top-levels -> 8 ------------------------------

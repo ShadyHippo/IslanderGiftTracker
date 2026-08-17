@@ -16,18 +16,11 @@ const SCHEMA = `CREATE TABLE IF NOT EXISTS gifts (
   note TEXT,
   created_at TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
-INSERT OR IGNORE INTO meta (key, value) VALUES ('schema_version', '1');
 CREATE TABLE IF NOT EXISTS villagers (
   name TEXT PRIMARY KEY,
   favorite INTEGER NOT NULL DEFAULT 0,
   on_island INTEGER NOT NULL DEFAULT 0
 );`;
-
-export interface GiftEntry {
-  item: string;
-  date: string;
-}
 
 export interface VillagerFlags {
   favorite: boolean;
@@ -112,21 +105,6 @@ export function giftedItems(villager: string): Set<string> {
   return out;
 }
 
-/** Gift log rows for this villager, newest first. */
-export function giftHistory(villager: string): GiftEntry[] {
-  const db = state.db;
-  if (!db) return [];
-  const out: GiftEntry[] = [];
-  for (const r of db.exec('SELECT item, date FROM gifts WHERE villager = ? ORDER BY date DESC, id DESC', [villager])) {
-    for (const row of r.values) {
-      if (typeof row[0] === 'string' && typeof row[1] === 'string') {
-        out.push({ item: row[0], date: row[1] });
-      }
-    }
-  }
-  return out;
-}
-
 /** Log a gift (or delete it when already logged — undo). */
 export function toggleGifted(villager: string, item: string): void {
   const db = state.db;
@@ -164,19 +142,6 @@ export async function saveProgress(): Promise<void> {
   } finally {
     state.saving = false;
   }
-}
-
-/** Per-villager flags (favorite / on my island). */
-export function villagerFlags(name: string): VillagerFlags {
-  const db = state.db;
-  if (!db) return { favorite: false, onIsland: false };
-  for (const r of db.exec('SELECT favorite, on_island FROM villagers WHERE name = ?', [name])) {
-    if (r.values.length) {
-      const [f, o] = r.values[0];
-      return { favorite: Number(f) === 1, onIsland: Number(o) === 1 };
-    }
-  }
-  return { favorite: false, onIsland: false };
 }
 
 /** Flags for every villager that has a row (unflagged villagers aren't present). */

@@ -4,7 +4,6 @@ import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 interface RefManifestEntry {
   version: number;
   file: string;
-  size: number;
   sha256: string;
 }
 
@@ -13,10 +12,8 @@ interface RefManifest {
   references: RefManifestEntry[] | null;
 }
 
-export type RefDbStatus = 'idle' | 'downloading' | 'initializing' | 'ready' | 'error';
-
 const state = $state({
-  status: 'idle' as RefDbStatus,
+  status: 'idle' as 'idle' | 'downloading' | 'initializing' | 'ready' | 'error',
   progress: 0,
   error: null as string | null,
   db: null as Database | null,

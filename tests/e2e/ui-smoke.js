@@ -10,12 +10,6 @@ const page = await browser.newPage({ viewport: { width: 390, height: 844 } }); /
 
 // Autosave status indicator (passive pill in App.svelte): 'Unsaved changes'
 // while debouncing, then 'Saved hh:mm:ss' after the upload completes.
-const waitDirty = () =>
-  page.waitForFunction(
-    () => document.querySelector('[data-save-status]')?.textContent?.trim() === 'Unsaved changes',
-    null,
-    { timeout: 5000 },
-  );
 const waitSaved = () =>
   page.waitForFunction(
     () => document.querySelector('[data-save-status]')?.textContent?.trim().startsWith('Saved '),

@@ -412,7 +412,7 @@ def cached_item_icon(url):
     return data
 
 
-def build_house_data(db, sheets, no_images, img_dir=None):
+def build_house_data(db, sheets, no_images, img_dir=None, image_urls=None):
     """Create + fill house_items (exact variant colors) and house_images
     (interior/exterior photos, full quality). Skips gracefully on network errors.
     If img_dir is set, write images to disk and store URLs instead of BLOBs."""
@@ -482,6 +482,13 @@ def build_house_data(db, sheets, no_images, img_dir=None):
                 if img_dir:
                     back_img_fn = sanitize_filename(hit["name"]) + (f'_{sanitize_filename(back_var)}' if back_var else '') + '.png'
                     back_url = f'/img/{sanitize_filename(hit["category"])}/{back_img_fn}'
+                    # Write to the per-category directory to match the URL
+                    back_path = os.path.join(img_dir, sanitize_filename(hit["category"]), back_img_fn)
+                    os.makedirs(os.path.dirname(back_path), exist_ok=True)
+                    with open(back_path, 'wb') as bf:
+                        bf.write(icon)
+                    if image_urls is not None:
+                        image_urls.append(back_url)
                     db.execute("INSERT OR REPLACE INTO images VALUES (?,?,?,?)",
                                (hit["category"], hit["name"], back_var, back_url))
                 else:
@@ -609,10 +616,10 @@ def main():
     print(f"    items: {n_items} rows")
 
     # per-villager house data (exact furniture colors + interior/exterior photos)
-    build_house_data(db, sheets, no_images, img_dir=img_dir)
+    image_urls = []
+    build_house_data(db, sheets, no_images, img_dir=img_dir, image_urls=image_urls)
 
     # images
-    image_urls = []
     if not no_images:
         print("[3/4] fetching images ...")
         for d in (CACHE_DIR, IMAGES_RAW, IMAGES_THUMB):
@@ -778,6 +785,7 @@ def main():
         db.execute("INSERT INTO hp_new SELECT villager, kind, url FROM house_images")
         db.execute("DROP TABLE house_images")
         db.execute("ALTER TABLE hp_new RENAME TO house_images")
+        db.commit()
         db.execute("VACUUM")
 
     print(f"[4/4] writing db + gz ...")

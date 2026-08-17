@@ -381,8 +381,11 @@ export function houseImages(
     if (res.length) {
       for (const [dbName, data] of res[0].values) {
         if (typeof dbName !== 'string' || !(data instanceof Uint8Array)) continue;
-        out.set(dbName, data as Uint8Array<ArrayBuffer>);
-        found.add(dbName.toLowerCase());
+        const match = names.find((n) => n.toLowerCase() === dbName.toLowerCase());
+        if (match) {
+          out.set(match, data as Uint8Array<ArrayBuffer>);
+          found.add(match.toLowerCase());
+        }
       }
     }
   } catch {

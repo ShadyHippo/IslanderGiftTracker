@@ -211,8 +211,8 @@ try {
     process.exit(1);
   }
   const houseThumbs = await page.locator('section:has-text("Their house") li img[src^="blob:"]').count();
-  if (houseThumbs === 0) {
-    console.error('FAIL: house items should render exact thumbnails (blob: URLs)');
+  if (houseThumbs !== houseItems) {
+    console.error(`FAIL: all ${houseItems} house items should render exact thumbnails, got ${houseThumbs}`);
     process.exit(1);
   }
   const buyLine = await page.locator('p:has-text("Buy:")').count();

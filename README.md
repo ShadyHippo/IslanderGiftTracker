@@ -16,6 +16,42 @@ docker compose -f server/deploy/docker-compose.yml up -d --build
 First build takes a while (downloads ~1 GB of item images from Nookipedia).
 Everything is baked into the Docker image — no external files needed.
 
+### Data directory
+
+By default, data is stored in a Docker-managed volume (~700 MB). To use a
+specific host directory instead (e.g. for backups or NAS storage):
+
+1. Create the directory:
+
+```bash
+mkdir -p /path/to/data
+```
+
+2. Edit `server/deploy/docker-compose.yml` — replace the volume section:
+
+```yaml
+# Before (Docker-managed volume):
+volumes:
+  - acnh-data:/data
+
+# After (host directory):
+volumes:
+  - /path/to/data:/data
+```
+
+3. Remove the `volumes:` section at the bottom that defines `acnh-data:`.
+
+4. Start the service:
+
+```bash
+docker compose -f server/deploy/docker-compose.yml up -d --build
+```
+
+The data directory contains:
+- `ref/` — reference DB + images (~690 MB, read-only catalog)
+- `progress/` — per-user gift logs + backups (<1 MB)
+- `users.db` — user accounts (<1 MB)
+
 ### Add users
 
 ```bash

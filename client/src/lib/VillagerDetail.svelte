@@ -88,7 +88,7 @@
     const db = refdb.db;
     if (!db) return;
     groups = giftIdeasByGroup(db, villager);
-    const names = houseItems(villager);
+    const names = houseItems(villager, 999);
     house = houseItemsDetailed(db, villager.name, names);
     houseImgs = houseImageUrls(db, villager.name, names);
     housePhotosData = housePhotoUrls(db, villager.name);

@@ -1,7 +1,7 @@
-const CACHE_NAME = 'acnh-v2';
-const SHELL_CACHE = 'acnh-shell-v2';
-const DB_CACHE = 'acnh-db-v2';
-const IMG_CACHE = 'acnh-img-v2';
+const CACHE_NAME = 'acnh-v3';
+const SHELL_CACHE = 'acnh-shell-v3';
+const DB_CACHE = 'acnh-db-v3';
+const IMG_CACHE = 'acnh-img-v3';
 
 // App shell: built assets from Vite + index.html
 const SHELL_ASSETS = [

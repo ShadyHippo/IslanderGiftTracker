@@ -1,5 +1,6 @@
 # --- Build artifacts (regenerate with `make build-db`) ---
 reference.db
+img/
 reference.v*.db.gz
 cache/
 images-missed.txt

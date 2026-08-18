@@ -10,7 +10,7 @@ synced to a home server.
 ```bash
 git clone https://github.com/ShadyHippo/IslanderGiftTracker.git
 cd IslanderGiftTracker
-docker compose -f server/deploy/docker-compose.yml up -d --build
+docker compose up -d --build
 ```
 
 First build takes a while (downloads ~1 GB of item images from Nookipedia).
@@ -24,27 +24,13 @@ specific host directory instead (e.g. for backups or NAS storage):
 1. Create the directory:
 
 ```bash
-mkdir -p /path/to/data
+mkdir -p data
 ```
 
-2. Edit `server/deploy/docker-compose.yml` — replace the volume section:
-
-```yaml
-# Before (Docker-managed volume):
-volumes:
-  - acnh-data:/data
-
-# After (host directory):
-volumes:
-  - /path/to/data:/data
-```
-
-3. Remove the `volumes:` section at the bottom that defines `acnh-data:`.
-
-4. Start the service:
+2. Start the service (data directory is `./data` by default):
 
 ```bash
-docker compose -f server/deploy/docker-compose.yml up -d --build
+docker compose up -d --build
 ```
 
 The data directory contains:
@@ -56,8 +42,7 @@ The data directory contains:
 
 ```bash
 # Create or update a user
-docker compose -f server/deploy/docker-compose.yml run --rm acnh \
-  -set-password alice -password mypassword
+docker compose run --rm acnh -set-password alice -password mypassword
 ```
 
 Or set initial users via environment variable in `docker-compose.yml`:

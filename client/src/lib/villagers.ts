@@ -1,5 +1,10 @@
 import type { Database } from 'sql.js';
 
+/** Strip diacritics / accent marks for URL-safe slugs. */
+export function slugify(s: string): string {
+  return s.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_|_$/g, '').toLowerCase();
+}
+
 export interface Villager {
   name: string;
   icon_image: string;
@@ -36,12 +41,28 @@ export function allVillagers(db: Database): Villager[] {
 export type VillagerRow = Record<string, string>;
 
 export function villagerByName(db: Database, name: string): VillagerRow | null {
+  // Exact match first.
   const res = db.exec('SELECT * FROM villagers WHERE name = ?', [name]);
-  if (!res.length || !res[0].values.length) return null;
-  const { columns, values } = res[0];
-  const obj: Record<string, unknown> = {};
-  columns.forEach((c, i) => (obj[c] = values[0][i]));
-  return obj as VillagerRow;
+  if (res.length && res[0].values.length) {
+    const { columns, values } = res[0];
+    const obj: Record<string, unknown> = {};
+    columns.forEach((c, i) => (obj[c] = values[0][i]));
+    return obj as VillagerRow;
+  }
+  // Fallback: accent-insensitive match (slug against URL param).
+  const slug = slugify(name);
+  const all = db.exec('SELECT * FROM villagers');
+  if (!all.length) return null;
+  const { columns, values } = all[0];
+  for (const row of values) {
+    const rowName = row[columns.indexOf('name')] as string;
+    if (slugify(rowName) === slug) {
+      const obj: Record<string, unknown> = {};
+      columns.forEach((c, i) => (obj[c] = row[i]));
+      return obj as VillagerRow;
+    }
+  }
+  return null;
 }
 
 /** Image URL per villager name, from the images table. */
@@ -58,10 +79,16 @@ export function villagerImageUrls(db: Database): Map<string, string> {
   return out;
 }
 
-/** Single villager's image URL, or null. */
+/** Single villager's image URL, or null. Accent-insensitive. */
 export function villagerImageUrl(db: Database, name: string): string | null {
-  const res = db.exec("SELECT url FROM images WHERE lower(category) = 'villagers' AND name = ?", [name]);
-  if (!res.length || !res[0].values.length) return null;
-  const url = res[0].values[0][0];
-  return typeof url === 'string' && url ? url : null;
+  const res = db.exec("SELECT name, url FROM images WHERE lower(category) = 'villagers'");
+  if (!res.length) return null;
+  const slug = slugify(name);
+  for (const row of res[0].values) {
+    if (slugify(row[0] as string) === slug) {
+      const url = row[1];
+      return typeof url === 'string' && url ? url : null;
+    }
+  }
+  return null;
 }

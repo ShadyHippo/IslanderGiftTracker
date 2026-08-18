@@ -1,0 +1,136 @@
+# Fill in the Variation for each item.
+# Use the exact variation name from the ACNH data spreadsheet (case-insensitive).
+# Use "" for base/default variant (no color).
+# Leave blank if you don't know — it will keep the current (wrong) value.
+#
+# Nookipedia pages for reference:
+#   https://nookipedia.com/wiki/Ace
+#   https://nookipedia.com/wiki/Antonio
+#   ...etc
+
+=== Ace (13 items) ===
+water bird: Green
+double sofa: Green
+ranch bed: Green with purple gingham
+mini DIY workbench: Green
+portable record player: Green
+pitcher plant: ""
+wall shelf with bottles: Natural wood 
+vintage stool: Green
+vintage desk: Green
+vintage low table: Green
+vintage dresser: Green
+ranch kitchen: Green
+glowing-moss jar: Green
+
+=== Antonio (2 items) ===
+wooden bookshelf: Light Brown
+throwback skull radio: White
+
+=== Barold (5 items) ===
+shower booth: White
+upright locker: Silver None
+wall-mounted phone: White
+surveillance camera: ""
+aluminum rug: ""
+
+=== Cece (3 items) ===
+Shiver top: ""
+Big Man bench: ""
+squid jukebox: ""
+
+=== Cephalobot (9 items) ===
+kitchen stove: ""
+operating-room cart: ""
+throwback skull radio: Black
+robot arm: Yellow
+inspection equipment: Silver Wave data
+spaceship control panel: Blue Topography data
+strategic meeting table: Blue Topography data
+cold sleep pod: Blue
+crew member's seat: Blue
+
+=== Ione (15 items) ===
+compact kitchen: Blue
+cassette player: Blue
+wall-mounted TV (50 in.): Black
+cute DIY table: Blue
+wall-mounted tool board: Blue
+mini fridge: Blue
+round pillow: Blue
+starry-skies rug: ""
+Nintendo Switch: Neon blue & neon red
+cool side table: Blue with black
+nordic lowboard: Black None
+dreamy bed: Blue
+dreamy wall rack: Blue
+gaming chair: Black & Blue
+gaming desk: Black and Blue Desktop
+
+=== Jacques (1 item) ===
+surveillance camera: ""
+
+=== Marlo (8 items) ===
+document stack: Text Documents
+laptop: Black Desktop
+double sofa: Black
+den desk: Dark Wood
+den chair: Black
+aluminum briefcase: Stacks of cash
+cool low table: Black with Black
+cool side table: Black with Black
+
+
+=== Mineru (3 items) ===
+Zonai authentication crest: ""
+Silent princess: ""
+Fairy bottle: ""
+
+=== Pietro (3 items) ===
+NOTE* Pietro has TWO DIFFERENT COLORFUL WHEELS
+colorful wheel: Colorful numbers
+colorful wheel: Black & red
+cotton-candy stall: Pink
+crescent-moon chair: Yellow
+
+=== Raymond (7 items) ===
+office desk: White
+water cooler: White
+modern office chair: Blue
+den chair: Green
+iron worktable: White
+wall clock: White
+document stack: Resource documents
+Newton's cradle: ""
+
+=== Roswell (11 items) ===
+stacked bottle crates: Yellow - none
+stacked bottle crates (2nd): Blue - None
+cassette player: White
+cooler box: Green
+fishing-boat flag: Nintenmaru - Big Catch
+bottled beverage: Clear and Light Blue
+fish container: Light blue & none
+bottle crate: yellow
+deep fryer: green
+outdoor kitchen: avocado
+aji fry: ""
+
+=== Shino (10 items) ===
+clay furnace: ""
+cherry-blossom bonsai: ""
+noh mask: ""
+zen cushion: Crane
+bamboo speaker: Smoke-cured bamboo
+zen lowboard: Natural wood
+japanese dresser: Red
+zen low table: Black
+tokonoma: Green maple leaves
+yunomi teacup: Plum blossoms
+
+=== Tulin (2 items) ===
+silent princess: ""
+fairy bottle: ""
+
+=== Viche (1 item) ===
+frye top: ""

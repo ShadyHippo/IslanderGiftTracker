@@ -1,6 +1,6 @@
 <script lang="ts">
   import { getRefDbState } from './refdb.svelte';
-  import { villagerByName, villagerImageUrl, type VillagerRow } from './villagers';
+  import { villagerByName, villagerImageUrl, slugify, type VillagerRow } from './villagers';
   import {
     giftIdeasByGroup,
     giftImageUrls,
@@ -41,7 +41,7 @@
   function searchItems(group: GiftGroup): GiftIdea[] {
     const q = giftQuery.trim().toLowerCase();
     if (!q) return group.items;
-    return group.items.filter((i) => `${i.name} ${i.variation} ${i.category}`.toLowerCase().includes(q));
+    return group.items.filter((i) => slugify(`${i.name} ${i.variation} ${i.category}`).includes(q));
   }
 
   function visibleItems(group: GiftGroup): GiftIdea[] {

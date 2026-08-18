@@ -19,6 +19,7 @@ import html as _html
 import json
 import os
 import re
+import unicodedata
 import sqlite3
 import sys
 import urllib.error
@@ -42,11 +43,15 @@ DB_VERSION = 1
 
 
 def sanitize_filename(s):
-    """Lowercase, spaces->underscores, strip parens/apostrophes/special chars."""
+    """Lowercase, strip accents + non-ASCII, spaces->underscores, special chars."""
     s = _html.unescape(str(s))
+    # Map symbolic chars to words before stripping non-ASCII
+    s = s.replace('←', 'left').replace('→', 'right')
+    # Decompose accented chars (e → e + ´) then drop combining marks
+    s = unicodedata.normalize('NFKD', s).encode('ascii', 'ignore').decode('ascii')
     s = s.lower().replace(' ', '_').replace('-', '_')
-    s = re.sub(r"[()'&?/\\]", '', s)
-    s = re.sub(r'_+', '_', s).strip('_')
+    s = re.sub(r'[^\w.]', '', s)
+    s = re.sub(r'_+', '_', s).strip('_.')
     return s
 
 NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
@@ -429,6 +434,14 @@ def build_house_data(db, sheets, no_images, img_dir=None, image_urls=None):
         print(f"    WARN: nh_house fetch failed ({e}); house section will fall back")
         return
     lookup = build_variant_lookup(sheets)
+    # Load manual overrides for villagers with missing Nookipedia URLs
+    overrides_path = os.path.join(HERE, "house_overrides.json")
+    house_overrides = {}
+    if os.path.exists(overrides_path):
+        with open(overrides_path) as f:
+            house_overrides = json.load(f)
+        # Remove comment keys
+        house_overrides = {k: v for k, v in house_overrides.items() if not k.startswith('_')}
     rows = cargo.get("cargoquery", [])
     n_items = 0
     n_villagers = 0
@@ -446,6 +459,11 @@ def build_house_data(db, sheets, no_images, img_dir=None, image_urls=None):
             nm = it.get("name", "")
             var = house_variation_from_url(it.get("image_url", ""))
             norm = re.sub(r'[\s-]+', ' ', nm.strip().lower())
+            # Check manual override when URL is empty
+            if not var:
+                override_key = f"{villager}/{nm}"
+                if override_key in house_overrides:
+                    var = house_overrides[override_key]
             hit = resolve_house_variant(lookup.get(norm), var)
             if not hit:
                 continue

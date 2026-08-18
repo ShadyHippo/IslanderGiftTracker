@@ -1,6 +1,6 @@
 <script lang="ts">
   import { getRefDbState, loadReferenceDb } from './refdb.svelte';
-  import { allVillagers, villagerImageUrls, type Villager } from './villagers';
+  import { allVillagers, slugify, villagerImageUrls, type Villager } from './villagers';
   import {
     getProgressState,
     allVillagerFlags,
@@ -43,7 +43,7 @@
     if (q) {
       list = list.filter(
         (v) =>
-          v.name.toLowerCase().includes(q) ||
+          slugify(v.name).includes(q) ||
           v.species.toLowerCase().includes(q) ||
           v.personality.toLowerCase().includes(q) ||
           v.hobby.toLowerCase().includes(q),
@@ -174,7 +174,7 @@
             {@const island = flags.get(v.name)?.onIsland ?? false}
             <li class="flex items-center gap-2 px-4 py-3 hover:bg-green-50">
               <a
-                href={p('/villager/:name', { params: { name: v.name } })}
+                href={p('/villager/:name', { params: { name: slugify(v.name) } })}
                 class="flex min-w-0 flex-1 items-center gap-3"
               >
                 {#if imgFor(v.name)}

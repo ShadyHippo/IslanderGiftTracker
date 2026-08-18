@@ -54,18 +54,64 @@ function scheduleSave() {
   }, AUTOSAVE_MS);
 }
 
+/** Persist raw bytes to IndexedDB so data survives offline tab close. */
+const PROG_IDB = 'acnh';
+const PROG_STORE = 'progress';
+const PROG_KEY = 'current';
+
+function openProgIdb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(PROG_IDB, 2);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains('refdb')) db.createObjectStore('refdb');
+      if (!db.objectStoreNames.contains('progress')) db.createObjectStore('progress');
+      if (!db.objectStoreNames.contains('imgcache')) db.createObjectStore('imgcache');
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error ?? new Error('indexeddb open failed'));
+  });
+}
+
+async function idbSaveProgress(bytes: ArrayBuffer): Promise<void> {
+  try {
+    const db = await openProgIdb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(PROG_STORE, 'readwrite');
+      tx.objectStore(PROG_STORE).put(bytes, PROG_KEY);
+      tx.oncomplete = () => { db.close(); resolve(); };
+      tx.onerror = () => { db.close(); reject(tx.error); };
+    });
+  } catch { /* non-critical */ }
+}
+
+async function idbLoadProgress(): Promise<ArrayBuffer | null> {
+  try {
+    const db = await openProgIdb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(PROG_STORE, 'readonly');
+      const req = tx.objectStore(PROG_STORE).get(PROG_KEY);
+      req.onsuccess = () => { db.close(); resolve(req.result ?? null); };
+      req.onerror = () => { db.close(); reject(req.error); };
+    });
+  } catch { return null; }
+}
+
 /** Best-effort final flush when the tab is closing (keepalive survives unload). */
 export function flushProgressOnUnload(): void {
   const db = state.db;
   if (!db || !state.dirty) return;
+  const bytes = db.export();
+  // Always persist to IndexedDB — survives offline tab close
+  void idbSaveProgress(bytes.buffer);
   try {
     fetch('/api/progress', {
       method: 'PUT',
-      body: new Blob([db.export() as unknown as BlobPart]),
+      body: new Blob([bytes as unknown as BlobPart]),
       keepalive: true,
     });
   } catch {
-    // best effort; the debounced save usually already covered this
+    // best effort
   }
 }
 
@@ -77,11 +123,24 @@ export async function loadProgress(): Promise<void> {
   }
   state.status = 'loading';
   state.error = null;
+  const SQL = await initSql();
   try {
-    const bytes = await progressDownload();
-    const SQL = await initSql();
+    // Try server first; fall back to IndexedDB cache
+    let bytes: ArrayBuffer;
+    try {
+      bytes = await progressDownload();
+      // Got fresh data from server — update local cache
+      await idbSaveProgress(bytes);
+    } catch {
+      // Server unreachable — try local cache
+      const cached = await idbLoadProgress();
+      if (!cached || cached.byteLength === 0) {
+        throw new Error('Cannot reach server and no local backup found.');
+      }
+      bytes = cached;
+    }
     const db = new SQL.Database(new Uint8Array(bytes));
-    db.exec(SCHEMA); // server pre-creates it, but stay safe with a fresh/empty file
+    db.exec(SCHEMA);
     state.db = db;
     state.version++;
     state.dirty = false;
@@ -124,35 +183,41 @@ export function toggleGifted(villager: string, item: string): void {
   }
   state.version++;
   state.dirty = true;
+  state.error = null;
+  pendingMutation = true;
   scheduleSave();
 }
 
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
-let retryCount = 0;
-const MAX_RETRY_DELAY = 30000;
+let pendingMutation = false;
 
-/** Upload the user's progress db to the server — the single backup file. */
+/**
+ * Save progress to server + IndexedDB. On failure, retry once after 2s.
+ * Further retries only happen when the user triggers a new mutation.
+ */
 export async function saveProgress(): Promise<void> {
   const db = state.db;
   if (!db || state.saving) return;
   state.saving = true;
   state.error = null;
+  pendingMutation = false;
+  const bytes = db.export();
   try {
-    await progressUpload(db.export());
+    // Always persist locally first — data is safe even if server is down
+    await idbSaveProgress(bytes.buffer);
+    await progressUpload(bytes);
     state.dirty = false;
     state.savedAt = new Date().toLocaleTimeString();
-    retryCount = 0;
   } catch (e) {
-    state.error = e instanceof Error ? e.message : 'save failed';
-    // Schedule retry with exponential backoff
-    retryCount++;
-    const delay = Math.min(1000 * Math.pow(2, retryCount - 1), MAX_RETRY_DELAY);
+    state.error = 'Save failed — will retry on next edit';
+    state.dirty = true;
+    // One retry after 2s; no further auto-retries
     if (retryTimer) clearTimeout(retryTimer);
     retryTimer = setTimeout(() => {
       retryTimer = null;
-      state.dirty = true; // mark so the badge shows correctly
-      void saveProgress();
-    }, delay);
+      // Only retry if no mutation happened (mutation will trigger its own save)
+      if (!pendingMutation) void saveProgress();
+    }, 2000);
   } finally {
     state.saving = false;
   }
@@ -184,6 +249,8 @@ function flipFlag(name: string, col: 'favorite' | 'on_island') {
   db.run('DELETE FROM villagers WHERE favorite = 0 AND on_island = 0');
   state.version++;
   state.dirty = true;
+  state.error = null;
+  pendingMutation = true;
   scheduleSave();
 }
 

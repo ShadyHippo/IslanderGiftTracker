@@ -27,12 +27,16 @@ export function getRefDbState() {
 const IDB_NAME = 'acnh';
 const IDB_STORE = 'refdb';
 const IDB_KEY = 'current';
+const IDB_VERSION = 2;
 
 function openIdb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(IDB_NAME, 1);
+    const req = indexedDB.open(IDB_NAME, IDB_VERSION);
     req.onupgradeneeded = () => {
-      req.result.createObjectStore(IDB_STORE);
+      const db = req.result;
+      if (!db.objectStoreNames.contains('refdb')) db.createObjectStore('refdb');
+      if (!db.objectStoreNames.contains('progress')) db.createObjectStore('progress');
+      if (!db.objectStoreNames.contains('imgcache')) db.createObjectStore('imgcache');
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error ?? new Error('indexeddb open failed'));

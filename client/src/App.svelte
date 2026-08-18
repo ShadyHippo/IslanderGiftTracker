@@ -3,7 +3,7 @@
   import { Router } from 'sv-router';
   import { getSession, checkSession } from './lib/session.svelte';
   import { getRefDbState, loadReferenceDb } from './lib/refdb.svelte';
-  import { getProgressState, loadProgress, flushProgressOnUnload } from './lib/progress.svelte';
+  import { getProgressState, loadProgress, flushProgressOnUnload, saveProgress } from './lib/progress.svelte';
   import Login from './lib/Login.svelte';
   import './lib/router';
 
@@ -36,6 +36,17 @@
     const handler = () => flushProgressOnUnload();
     window.addEventListener('pagehide', handler);
     return () => window.removeEventListener('pagehide', handler);
+  });
+
+  // Retry save when the browser comes back online
+  $effect(() => {
+    const onOnline = () => {
+      if (progress.dirty && !progress.saving) {
+        void saveProgress();
+      }
+    };
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
   });
 </script>
 

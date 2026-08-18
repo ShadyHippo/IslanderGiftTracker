@@ -1,4 +1,4 @@
-.PHONY: build-db server-run server-build client-install client-dev client-build docker
+.PHONY: build-db server-run server-build client-install client-dev client-build docker createuser
 
 # Rebuild the reference database from the xlsx (+ dodo.ac images)
 build-db:
@@ -45,6 +45,12 @@ client-dev: client-dirs
 # Docker image for deployment
 docker:
 	docker build -t acnh-server server/deploy
+
+# Create/update a user (server must be built first)
+# Usage: make createuser USER=alice PASS=secret123
+createuser:
+	@test -n "$(USER)" -a -n "$(PASS)" || (echo "Usage: make createuser USER=name PASS=pass" && exit 1)
+	docker compose -f server/deploy/docker-compose.yml run --rm acnh -set-password "$(USER)" -password "$(PASS)"
 
 # Categories that need images: everything the gift matcher shows + villager
 # icons. Pass explicitly — the default (all sheets) balloons the db significantly.

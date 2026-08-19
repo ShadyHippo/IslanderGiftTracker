@@ -22,6 +22,27 @@ via Makefile targets (`make dev-ref`, `make client-build`, `make client-check`,
   re-gzip to `reference.v1.db.gz`), or rebuild with `make dev-ref` and ignore
   the trimmed config. Verify with `PRAGMA quick_check` after any restore.
 
+## Pristine images backup — the manually-corrected dev build (do NOT delete)
+
+- Location: **`pristine/images/`** (gitignored; local disk only). Contains
+  `reference.db` + the full `img/` tree it references.
+- Captured 2026-08-19 from the good dev build being served (`reference.db` =
+  `reference.v12.db.gz`, `PRAGMA quick_check` = ok). This is the **only copy
+  with correct per-item house images**: the 92 `house_item_images` rows that a
+  bot manually repointed (Ace/Shino/Ione/Marlo/Raymond/Pietro/Roswell/etc.) to
+  the right variant images, plus color data. All 4777 image URLs resolve to
+  files on disk (verified).
+- It is the restore point for `dev-data/ref/reference.db` while the reproducible
+  build pipeline is being fixed. `scripts/build_db.py` now reproduces these
+  images: `house_overrides.json` drives both the variant colors AND the exact
+  per-villager variant icon (via `fetch_variant_icon`), applied accent-
+  insensitively so accented cargo names (`Viché`/`Renée`) match override keys.
+  This snapshot remains the reference to diff a fresh build against, and the
+  restore point if a future decision reverts any trimming.
+- Restoring: `cp pristine/images/reference.db dev-data/ref/reference.db` and
+  `cp -a pristine/images/img dev-data/ref/`. Verify with `PRAGMA quick_check`
+  and spot-check `house_item_images` URLs resolve.
+
 ## Reference db pipeline (scripts/build_db.py)
 
 Builds `dev-data/ref/reference.db` from the xlsx + Nookipedia (item icons,

@@ -54,6 +54,11 @@ def sanitize_filename(s):
     s = re.sub(r'_+', '_', s).strip('_.')
     return s
 
+def strip_accents(s):
+    """Remove diacritics so 'Viché'/'Renée' match 'Viche'/'Renee'."""
+    return unicodedata.normalize('NFKD', s).encode('ascii', 'ignore').decode('ascii')
+
+
 NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/126.0 Safari/537.36")
@@ -417,6 +422,112 @@ def cached_item_icon(url):
     return data
 
 
+def _cache_bytes(fn):
+    """Return cached bytes for a Nookipedia filename, or None."""
+    for d in (IMAGES_RAW, CACHE_DIR, HOUSE_IMG_CACHE):
+        p = os.path.join(d, fn)
+        if os.path.exists(p):
+            with open(p, "rb") as f:
+                return f.read()
+    return None
+
+
+def fetch_variant_icon(name, variation):
+    """Fetch the exact Nookipedia NH_Icon for name + variation (e.g.
+    'ranch bed' + 'Green - Blue gingham'). This is used for house items whose
+    exact variant the images stage can't produce (it only walks the xlsx
+    'Variation' body column). Returns (filename, bytes) or (None, None).
+    Disk-cached; safe to call mid-build. Falls back to the MediaWiki image
+    registry to match Nookipedia's exact filenames (e.g. 'Wall_Shelf_with_
+    Bottles', 'Bottle_Crate_(Yellow_-_Apple)')."""
+    if not variation:
+        return None, None
+    v = titlecase(variation).replace(' ', '_')
+    # Some xlsx variations end in a redundant 'None'/'null'/'NA' color segment
+    # that Nookipedia's filename omits (e.g. 'Black - None' -> '(Black)').
+    import re as _re
+    stripped = _re.sub(r'\s*-\s*(None|null|NA|N\/A)$', '', variation).strip()
+    vs = dict.fromkeys([v] + ([titlecase(stripped).replace(' ', '_')] if stripped and stripped != variation else []))
+    bases = [titlecase(name).replace(' ', '_'),
+             titlecase_hyphen(name).replace(' ', '_'),
+             name.replace(' ', '_')]
+    pats = ["{n}_({v})_NH_Icon.png", "{n}_({v})_NH_Texture.png", "{n}_({v})_NH.png"]
+    for base in dict.fromkeys(bases):
+        for vv in vs:
+            for pat in pats:
+                fn = pat.format(n=base, v=vv)
+                data = _cache_bytes(fn)
+                if data is None:
+                    data = try_fetch(fn)
+                    if data:
+                        with open(os.path.join(CACHE_DIR, fn), "wb") as f:
+                            f.write(data)
+                if data:
+                    return fn, maybe_thumb(fn, data)
+    # Registry fallback: Nookipedia filenames keep their own casing/stopwords
+    # (e.g. 'Wall_Shelf_with_Bottles', 'Wall-Mounted_TV'), so guessed prefixes
+    # can 404. Search the MediaWiki image registry with a best-effort base and
+    # match by token containment, then by variation containment.
+    import re as _re
+    want_v = _re.sub(r'\s+', ' ', variation).strip()
+    want_v = _re.sub(r'^NA\s*-\s*', '', want_v).lower()
+    want_tokens = set(_re.findall(r"[a-z0-9]+", want_v)) - {"none"}
+    name_tokens = set(_re.findall(r"[a-z0-9]+", name.lower()))
+    probes = list(dict.fromkeys(
+        [b for b in bases] +
+        [titlecase(name.split()[0]).replace(' ', '_'),
+         titlecase_hyphen(name.split()[0]).replace(' ', '_')] if name.split() else []
+    ))
+    for base in probes:
+        names = _wiki_allimages_filenames(base)
+        for fn in names:
+            if '_NH_' not in fn:
+                continue
+            m = _re.search(r'\((.*)\)_NH_', fn)
+            pre_nh = fn.split('_NH_', 1)[0]
+            tail = _re.search(r'\(([^()]*)\)$', pre_nh)
+            base_part = pre_nh[:tail.start()] if tail else pre_nh
+            fn_tokens = set(_re.findall(r"[a-z0-9]+", base_part.lower()))
+            if not (name_tokens <= fn_tokens):
+                continue
+            file_v = _re.sub(r'\s+', ' ', m.group(1)).strip().lower() if m else ''
+            if (want_tokens and want_tokens <= set(_re.findall(r"[a-z0-9]+", file_v))) or \
+               (not want_tokens and _re.sub(r'[^a-z0-9]', '', want_v) == _re.sub(r'[^a-z0-9]', '', file_v)):
+                data = _cache_bytes(fn)
+                if data is None:
+                    data = try_fetch(fn)
+                    if data:
+                        with open(os.path.join(CACHE_DIR, fn), "wb") as f:
+                            f.write(data)
+                if data:
+                    return fn, maybe_thumb(fn, data)
+    return None, None
+
+
+def _wiki_allimages_filenames(prefix):
+    """Return the list of Nookipedia image filenames whose title starts with
+    prefix (cached per-prefix to avoid hammering the API mid-build)."""
+    key = "allimages_" + prefix
+    p = os.path.join(CACHE_DIR, key + ".json")
+    if os.path.exists(p):
+        with open(p) as f:
+            return json.load(f)
+    q = {"action": "query", "format": "json", "list": "allimages",
+         "aiprefix": prefix, "ailimit": "500"}
+    url = "https://nookipedia.com/w/api.php?" + urllib.parse.urlencode(q)
+    try:
+        d = json.loads(http_get(url).decode())
+        names = [i["name"] for i in d.get("query", {}).get("allimages", [])]
+    except Exception:
+        names = []
+    try:
+        with open(p, "w") as f:
+            json.dump(names, f)
+    except Exception:
+        pass
+    return names
+
+
 def build_house_data(db, sheets, no_images, img_dir=None, image_urls=None):
     """Create + fill house_items (exact variant colors) and house_images
     (interior/exterior photos, full quality). Skips gracefully on network errors.
@@ -459,11 +570,16 @@ def build_house_data(db, sheets, no_images, img_dir=None, image_urls=None):
             nm = it.get("name", "")
             var = house_variation_from_url(it.get("image_url", ""))
             norm = re.sub(r'[\s-]+', ' ', nm.strip().lower())
-            # Check manual override when URL is empty
-            if not var:
-                override_key = f"{villager}/{nm}"
-                if override_key in house_overrides:
-                    var = house_overrides[override_key]
+            # Manual override always wins: Nookipedia's URL may carry the wrong
+            # variation (e.g. Ione's blue TV when her house is black), and for
+            # many villagers the URL is empty so the base would be used anyway.
+            override_key = f"{villager}/{nm}"
+            # Villager names may carry accents (e.g. 'Viché', 'Renée') that the
+            # override keys omit, so match accent-insensitively.
+            override_key_flat = f"{strip_accents(villager)}/{nm}"
+            override = override_key in house_overrides or override_key_flat in house_overrides
+            if override:
+                var = house_overrides.get(override_key, house_overrides.get(override_key_flat))
             hit = resolve_house_variant(lookup.get(norm), var)
             if not hit:
                 continue
@@ -471,15 +587,41 @@ def build_house_data(db, sheets, no_images, img_dir=None, image_urls=None):
                        (villager, hit["name"], hit["category"], hit["c1"], hit["c2"]))
             n_items += 1
             if not no_images:
-                icon_tasks.append((hit, it.get("image_url", "")))
+                icon_tasks.append((hit, it.get("image_url", ""), override,
+                                   var if override else None))
         if not no_images:
             # Exact per-villager item icons (also covers clothing like chef's
-            # outfit, which the furniture-only images query would miss).
-            for hit, url in icon_tasks:
-                icon = cached_item_icon(url)
+            # outfit, which the furniture-only images query would miss). For
+            # overridden items the original Nookipedia URL is missing/wrong, so
+            # fetch the exact icon for the *overridden* variation instead (full
+            # "Body - Pattern" string, e.g. 'Green - Blue gingham').
+            for hit, url, override, ov_var in icon_tasks:
+                icon = None
+                if override:
+                    if ov_var and ov_var.strip().lower() not in ("na", "none"):
+                        fn, icon = fetch_variant_icon(hit["name"], ov_var)
+                    if icon is None:
+                        base_cands = list(dict.fromkeys([
+                            titlecase(hit["name"]).replace(' ', '_') + "_NH_Icon.png",
+                            titlecase_hyphen(hit["name"]).replace(' ', '_') + "_NH_Icon.png",
+                            hit["name"].replace(' ', '_') + "_NH_Icon.png",
+                        ]))
+                        for base_fn in base_cands:
+                            data = _cache_bytes(base_fn)
+                            if data is None:
+                                data = try_fetch(base_fn)
+                                if data:
+                                    with open(os.path.join(CACHE_DIR, base_fn), "wb") as f:
+                                        f.write(data)
+                            if data:
+                                icon, fn = maybe_thumb(base_fn, data), base_fn
+                                break
+                else:
+                    icon = cached_item_icon(url)
+                    if icon:
+                        icon = maybe_thumb(urllib.parse.unquote(url.split('/')[-1]), icon)
                 if not icon:
                     continue
-                icon = maybe_thumb(urllib.parse.unquote(url.split('/')[-1]), icon)
                 if img_dir:
                     iv_path = os.path.join(img_dir, sanitize_filename(villager),
                                            sanitize_filename(hit["name"]) + '.png')
@@ -495,8 +637,10 @@ def build_house_data(db, sheets, no_images, img_dir=None, image_urls=None):
                 # Backfill the generic images table with the exact icon so gift
                 # suggestions also get it (fixes names the pattern-guesser misses,
                 # e.g. cream and sugar -> Cream_%26_Sugar on the wiki).
-                var_raw = (hit.get("var_raw") or "").strip().lower()
-                back_var = house_variation_from_url(url) if var_raw in ("", "na", "none") else hit["var_raw"]
+                back_var = (ov_var if override else
+                            (house_variation_from_url(url)
+                             if (hit.get("var_raw") or "").strip().lower() in ("", "na", "none")
+                             else hit["var_raw"]))
                 if img_dir:
                     back_img_fn = sanitize_filename(hit["name"]) + (f'_{sanitize_filename(back_var)}' if back_var else '') + '.png'
                     back_url = f'/img/{sanitize_filename(hit["category"])}/{back_img_fn}'

@@ -13,6 +13,7 @@
     type HouseItemDetail,
   } from './gifts';
   import { getProgressState, giftedItems, toggleGifted } from './progress.svelte';
+  import ConnectionStatus from './ConnectionStatus.svelte';
   import { route, navigate } from './router';
 
   const refdb = getRefDbState();
@@ -132,6 +133,7 @@
     >
       ← Back
     </button>
+    <ConnectionStatus />
     <h1 class="truncate text-xl font-bold text-green-800">{name}</h1>
   </header>
 

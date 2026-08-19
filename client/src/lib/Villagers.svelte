@@ -1,6 +1,7 @@
 <script lang="ts">
   import { getRefDbState, loadReferenceDb } from './refdb.svelte';
   import { allVillagers, slugify, villagerImageUrls, type Villager } from './villagers';
+  import ConnectionStatus from './ConnectionStatus.svelte';
   import {
     getProgressState,
     allVillagerFlags,
@@ -96,7 +97,10 @@
 <div class="flex min-h-screen flex-col bg-green-50">
   <header class="sticky top-0 z-10 border-b border-green-200 bg-white/95 px-4 pb-3 pt-4 backdrop-blur">
     <div class="mb-3 flex items-center justify-between gap-2">
-      <h1 class="text-xl font-bold text-green-800">Villagers</h1>
+      <div class="flex min-w-0 items-center gap-2">
+        <ConnectionStatus />
+        <h1 class="text-xl font-bold text-green-800">Villagers</h1>
+      </div>
       <button
         onclick={onLogout}
         disabled={loggingOut}

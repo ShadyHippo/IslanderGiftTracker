@@ -60,7 +60,7 @@
   <Router />
 
   {#if progress.status === 'ready'}
-    <div class="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-1">
+    <div class="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-1" style="padding-bottom: env(safe-area-inset-bottom, 0px)">
       {#if progress.error}
         <p class="rounded-lg bg-red-100 px-3 py-1 text-xs font-medium text-red-700">{progress.error}</p>
       {/if}

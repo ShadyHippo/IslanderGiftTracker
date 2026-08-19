@@ -38,10 +38,11 @@
   // Free-text search replaces the old category pills: matches name, variation
   // and category, same feel as the villager search page.
   let giftQuery = $state('');
+  const giftQ = $derived(giftQuery.trim().toLowerCase());
+  // Memoized per-group: only recompute when the query or group items change.
   function searchItems(group: GiftGroup): GiftIdea[] {
-    const q = giftQuery.trim().toLowerCase();
-    if (!q) return group.items;
-    return group.items.filter((i) => slugify(`${i.name} ${i.variation} ${i.category}`).includes(q));
+    if (!giftQ) return group.items;
+    return group.items.filter((i) => slugify(`${i.name} ${i.variation} ${i.category}`).includes(giftQ));
   }
 
   function visibleItems(group: GiftGroup): GiftIdea[] {

@@ -22,17 +22,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends gzip && rm -rf 
 WORKDIR /build
 COPY scripts/ scripts/
 COPY res/ res/
-RUN python3 scripts/build_db.py --out-dir /out/ref
+# Cache the image downloads across rebuilds (~1 GB of PNGs from Nookipedia)
+RUN --mount=type=cache,target=/build/cache python3 scripts/build_db.py --out-dir /out/ref
 
 # ── Stage 4: Final image ───────────────────────────────────────────
 FROM alpine:3.20
 RUN adduser -D -H -u 10001 acnh && apk add --no-cache python3
 COPY --from=server /out/acnh-server /usr/local/bin/acnh-server
 COPY --from=client /client/dist /app/client/dist
-COPY --from=refdb /out/ref /data/ref
+COPY --from=refdb /out/ref /app/ref
 RUN chown -R acnh:acnh /app /data
 USER acnh
 ENV DATA_DIR=/data \
+    REF_DIR=/app/ref \
     STATIC_DIR=/app/client/dist \
     PORT=8080
 EXPOSE 8080

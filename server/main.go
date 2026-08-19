@@ -54,7 +54,7 @@ func main() {
 		secureCookies: os.Getenv("SECURE_COOKIES") == "true",
 	}
 
-	refDir := filepath.Join(cfg.dataDir, "ref")
+	refDir := env("REF_DIR", filepath.Join(cfg.dataDir, "ref"))
 	progDir := filepath.Join(cfg.dataDir, "progress")
 	for _, d := range []string{cfg.dataDir, refDir, progDir, filepath.Join(progDir, "backups")} {
 		if err := os.MkdirAll(d, 0o755); err != nil {

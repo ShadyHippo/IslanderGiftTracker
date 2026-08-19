@@ -31,7 +31,7 @@ RUN adduser -D -H -u 10001 acnh && apk add --no-cache python3
 COPY --from=server /out/acnh-server /usr/local/bin/acnh-server
 COPY --from=client /client/dist /app/client/dist
 COPY --from=refdb /out/ref /app/ref
-RUN chown -R acnh:acnh /app /data
+RUN mkdir -p /data && chown -R acnh:acnh /app /data
 USER acnh
 ENV DATA_DIR=/data \
     REF_DIR=/app/ref \

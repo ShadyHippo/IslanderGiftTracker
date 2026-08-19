@@ -39,9 +39,12 @@ self.addEventListener('fetch', (event) => {
   // Skip non-GET
   if (request.method !== 'GET') return;
 
-  // API calls: network-first with offline fallback
+  // API calls: network-only. Never serve user data (e.g. /api/progress) stale
+  // from the browser disk cache — Chromium can return a cached 200 even when
+  // offline, which would overwrite the client's newer IndexedDB copy during a
+  // reload. The client falls back to its own IDB copy when this fails (503).
   if (url.pathname.startsWith('/api/')) {
-    event.respondWith(networkFirst(request));
+    event.respondWith(networkOnly(request));
     return;
   }
 
@@ -57,7 +60,46 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // App shell: stale-while-revalidate
+  // SPA navigation (deep links like /villager/ace): always serve the cached
+  // shell so the app loads offline from any route, not just '/'. Fall back to
+  // index.html if the exact path isn't cached.
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      (async () => {
+        const cache = await caches.open(SHELL_CACHE);
+        let response = await cache.match(request);
+        if (!response) response = await cache.match('/index.html');
+        if (response) {
+          // Rebuild the Response so the SW returns an opaque-ok navigation
+          // response (Chromium rejects a cached response whose URL doesn't
+          // match the top-level request URL, even for SPA fallback).
+          const body = await response.clone().arrayBuffer();
+          return new Response(body, {
+            status: 200,
+            statusText: 'OK',
+            headers: { 'Content-Type': 'text/html; charset=utf-8' },
+          });
+        }
+        // Online path: let the network serve it and cache the shell.
+        try {
+          const fresh = await fetch(request);
+          if (fresh.ok) {
+            const base = await caches.open(SHELL_CACHE);
+            if (fresh.url === request.url || request.url.endsWith('/')) {
+              await base.put(request, fresh.clone());
+            }
+            await base.put('/index.html', fresh.clone());
+          }
+          return fresh;
+        } catch {
+          return new Response('Offline', { status: 503 });
+        }
+      })(),
+    );
+    return;
+  }
+
+  // App shell assets (js/css): stale-while-revalidate
   event.respondWith(staleWhileRevalidate(request, SHELL_CACHE));
 });
 
@@ -70,6 +112,17 @@ async function cacheFirst(request, cacheName) {
     if (response.ok) {
       cache.put(request, response.clone());
     }
+    return response;
+  } catch {
+    return new Response('Offline', { status: 503 });
+  }
+}
+
+async function networkOnly(request) {
+  try {
+    // cache:'no-store' forces a real network request so the browser can't
+    // serve a stale disk-cached response while offline.
+    const response = await fetch(request, { cache: 'no-store' });
     return response;
   } catch {
     return new Response('Offline', { status: 503 });

@@ -104,6 +104,11 @@ export function flushProgressOnUnload(): void {
   const bytes = db.export();
   // Always persist to IndexedDB — survives offline tab close
   void idbSaveProgress(bytes.buffer);
+  // Only attempt the server PUT when the network is up. Offline it can never
+  // succeed, and an in-flight keepalive request during unload aborts the next
+  // navigation (ERR_FAILED), preventing the app from reloading offline to
+  // recover the IndexedDB copy. The 'online' listener re-syncs on reconnect.
+  if (!navigator.onLine) return;
   try {
     fetch('/api/progress', {
       method: 'PUT',
@@ -211,12 +216,15 @@ export async function saveProgress(): Promise<void> {
   } catch (e) {
     state.error = 'Save failed — will retry on next edit';
     state.dirty = true;
-    // One retry after 2s; no further auto-retries
+    // Don't auto-retry on a timer: a keepalive/in-flight PUT during unload
+    // aborts the next navigation (ERR_FAILED), so an offline tab can't reload
+    // to recover the IndexedDB copy. Re-sync happens on the next edit or when
+    // the browser fires 'online' (App.svelte). Keep a single retry after 2s
+    // only if no new mutation superseded this save.
     if (retryTimer) clearTimeout(retryTimer);
     retryTimer = setTimeout(() => {
       retryTimer = null;
-      // Only retry if no mutation happened (mutation will trigger its own save)
-      if (!pendingMutation) void saveProgress();
+      if (!pendingMutation && navigator.onLine) void saveProgress();
     }, 2000);
   } finally {
     state.saving = false;

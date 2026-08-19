@@ -315,7 +315,7 @@
               loading="lazy"
             />
           {/if}
-          <details open class="group mt-3 rounded-xl border border-green-200">
+          <details class="group mt-3 rounded-xl border border-green-200">
             <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
               <span class="flex items-baseline gap-2">
                 <span class="font-semibold text-green-900">House furniture</span>

@@ -81,16 +81,15 @@
     loggingOut = false;
   }
 
-  // Toggling a list filter clears the search text so the narrowed list is
-  // visible immediately instead of staying filtered by a stale query.
+  // Filters are mutually exclusive: selecting one clears the other.
   function toggleFavorites() {
     showFavorites = !showFavorites;
-    query = '';
+    if (showFavorites) showIsland = false;
   }
 
   function toggleIsland() {
     showIsland = !showIsland;
-    query = '';
+    if (showIsland) showFavorites = false;
   }
 </script>
 

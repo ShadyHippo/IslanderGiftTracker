@@ -38,7 +38,23 @@ export default defineConfig({
     __BUILD_HASH__: JSON.stringify(BUILD_HASH),
     __BUILD_TIME__: JSON.stringify(BUILD_TIME),
   },
-  plugins: [svelte(), tailwindcss()],
+  plugins: [
+    svelte(),
+    tailwindcss(),
+    {
+      name: 'sw-version',
+      closeBundle() {
+        try {
+          const { readFileSync, writeFileSync } = require('node:fs');
+          const { join } = require('node:path');
+          const swPath = join(__dirname, 'dist', 'sw.js');
+          let sw = readFileSync(swPath, 'utf8');
+          sw = sw.replace('__SW_VERSION__', BUILD_HASH);
+          writeFileSync(swPath, sw);
+        } catch {}
+      },
+    },
+  ],
   server: {
     host: true,
     port: 5173,

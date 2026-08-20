@@ -1,3 +1,4 @@
+const SW_VERSION = '__SW_VERSION__'; // replaced at build time with git hash
 const CACHE_NAME = 'acnh-v3';
 const SHELL_CACHE = 'acnh-shell-v3';
 const DB_CACHE = 'acnh-db-v3';
@@ -151,11 +152,13 @@ async function staleWhileRevalidate(request, cacheName) {
   return cached || fetchPromise;
 }
 
-// Message handler: pre-cache images from manifest
+// Message handler: pre-cache images + on-demand skipWaiting (for update flow)
 self.addEventListener('message', (event) => {
   if (event.data?.type === 'CACHE_IMAGES') {
     const { urls } = event.data;
     event.waitUntil(cacheImages(urls, event.source));
+  } else if (event.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting();
   }
 });
 

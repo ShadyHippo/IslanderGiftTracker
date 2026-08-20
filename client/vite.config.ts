@@ -33,6 +33,13 @@ const BUILD_TIME =
     .replace(',', '')
     .replace(/\//g, '-') + ' ET';
 
+// SW_VERSION must differ on EVERY deploy so the browser re-checks sw.js and
+// applies updates. .git is excluded from the Docker build context, so the hash
+// falls back to 'dev' there — append the build timestamp so it always changes.
+// When GIT_HASH reaches the build (e.g. `make docker` or GIT_HASH=...), the
+// real commit shows up front for at-a-glance verification.
+const SW_VERSION = `${BUILD_HASH} · ${BUILD_TIME}`;
+
 export default defineConfig({
   define: {
     __BUILD_HASH__: JSON.stringify(BUILD_HASH),
@@ -49,7 +56,7 @@ export default defineConfig({
           const { join } = require('node:path');
           const swPath = join(__dirname, 'dist', 'sw.js');
           let sw = readFileSync(swPath, 'utf8');
-          sw = sw.replace('__SW_VERSION__', BUILD_HASH);
+          sw = sw.replace('__SW_VERSION__', SW_VERSION);
           writeFileSync(swPath, sw);
         } catch {}
       },

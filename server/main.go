@@ -106,6 +106,10 @@ func main() {
 // newMux wires all routes; extracted so tests can build the same handler.
 func newMux(s *server) *http.ServeMux {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
+	})
 	mux.HandleFunc("POST /api/login", s.handleLogin)
 	mux.HandleFunc("POST /api/logout", s.requireAuth(s.handleLogout))
 	mux.HandleFunc("GET /api/me", s.requireAuth(s.handleMe))

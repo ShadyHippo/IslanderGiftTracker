@@ -28,7 +28,8 @@ RUN --mount=type=cache,target=/build/cache python3 scripts/build_db.py --out-dir
 
 # ── Stage 4: Final image ───────────────────────────────────────────
 FROM alpine:3.20
-RUN adduser -D -H -u 10001 acnh && apk add --no-cache python3
+RUN adduser -D -H -u 10001 acnh && apk add --no-cache python3 curl
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD curl -fsS http://127.0.0.1:8080/health >/dev/null || exit 1
 COPY --from=server /out/acnh-server /usr/local/bin/acnh-server
 COPY --from=client /client/dist /app/client/dist
 COPY --from=refdb /out/ref /app/ref

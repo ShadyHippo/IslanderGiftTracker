@@ -86,6 +86,28 @@
     window.addEventListener('online', onOnline);
     return () => window.removeEventListener('online', onOnline);
   });
+
+  // Keep the proxy/container warm — ping /health every 4 min while the
+  // tab is visible so acnh.datahippo.top doesn't cold-start for family.
+  $effect(() => {
+    let timer: ReturnType<typeof setInterval> | null = null;
+    const ping = () => {
+      if (document.visibilityState !== 'visible') return;
+      fetch('/health', { cache: 'no-store', keepalive: true }).catch(() => {});
+    };
+    const start = () => {
+      if (timer) return;
+      ping();
+      timer = setInterval(ping, 4 * 60 * 1000);
+    };
+    const stop = () => {
+      if (timer) { clearInterval(timer); timer = null; }
+    };
+    const onVis = () => { if (document.visibilityState === 'visible') start(); else stop(); };
+    document.addEventListener('visibilitychange', onVis);
+    start();
+    return () => { document.removeEventListener('visibilitychange', onVis); stop(); };
+  });
 </script>
 
 {#if session.checking}

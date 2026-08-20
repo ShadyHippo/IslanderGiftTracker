@@ -33,12 +33,28 @@ export function getSession() {
 export async function checkSession(): Promise<void> {
   session.checking = true;
   try {
-    session.user = await apiMe();
+    // Don't block the UI on a cold proxy — fall back to cached user after
+    // 2s so impatient family sees the app instantly. The real check still
+    // completes in the background and corrects the session if needed.
+    const timeout = new Promise<never>((_, rej) =>
+      setTimeout(() => rej(new Error('session timeout')), 2000),
+    );
+    session.user = await Promise.race([apiMe(), timeout]);
     cacheUser(session.user);
   } catch {
-    // Server unreachable — trust the cached user so the app works offline
-    // and across container restarts without forcing re-login.
-    session.user = cachedUser();
+    // Server unreachable / timed out — trust the cached user so the app
+    // works offline and across container restarts without forcing re-login.
+    const cached = cachedUser();
+    // If we raced, the real request may still succeed — correct in background
+    if (cached) session.user = cached;
+    else {
+      try {
+        session.user = await apiMe();
+        cacheUser(session.user);
+      } catch {
+        session.user = cached;
+      }
+    }
   } finally {
     session.checking = false;
   }

@@ -191,15 +191,26 @@ func (s *sessionStore) remove(tok string) {
 	delete(s.sessions, tok)
 }
 
-func (s *server) setSessionCookie(w http.ResponseWriter, tok string) {
+// isHTTPS reports whether the request reached the server over TLS, either
+// directly or through a proxy that sets X-Forwarded-Proto (SWAG does).
+func isHTTPS(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	return strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+}
+
+func (s *server) setSessionCookie(w http.ResponseWriter, r *http.Request, tok string) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookie,
 		Value:    tok,
 		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
-		Secure:   s.cfg.secureCookies,
-		MaxAge:   int(sessionTTL.Seconds()),
+		// Only mark Secure when the connection is actually HTTPS, so the
+		// session also works over plain HTTP (e.g. LAN IP:port on a phone).
+		Secure: s.cfg.secureCookies && isHTTPS(r),
+		MaxAge: int(sessionTTL.Seconds()),
 	})
 }
 
@@ -255,7 +266,7 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
 		return
 	}
-	s.setSessionCookie(w, tok)
+	s.setSessionCookie(w, r, tok)
 	log.Printf("login ok user=%q ip=%s", canonical, ip)
 	writeJSON(w, http.StatusOK, map[string]string{"username": canonical})
 }

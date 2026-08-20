@@ -33,7 +33,9 @@ export function getSession() {
 export async function checkSession(): Promise<void> {
   session.checking = true;
   try {
-    session.user = await apiMe();
+    // Hard timeout so the app can never sit on "Loading…" forever (a hung
+    // fetch or a stale service worker would otherwise block the login form).
+    session.user = await withTimeout(apiMe(), 8000);
     cacheUser(session.user);
   } catch {
     // Server unreachable — trust the cached user so the app works offline
@@ -42,6 +44,16 @@ export async function checkSession(): Promise<void> {
   } finally {
     session.checking = false;
   }
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('timed out')), ms);
+    promise.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (err) => { clearTimeout(timer); reject(err); },
+    );
+  });
 }
 
 export async function login(username: string, password: string): Promise<void> {

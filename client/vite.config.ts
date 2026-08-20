@@ -44,6 +44,7 @@ export default defineConfig({
   define: {
     __BUILD_HASH__: JSON.stringify(BUILD_HASH),
     __BUILD_TIME__: JSON.stringify(BUILD_TIME),
+    __SW_VERSION__: JSON.stringify(SW_VERSION),
   },
   plugins: [
     svelte(),

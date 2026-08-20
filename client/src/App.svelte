@@ -142,6 +142,28 @@
       </p>
     </div>
   {/if}
+  {#if refdb.status === 'downloading' || refdb.status === 'initializing'}
+    <div class="fixed inset-x-0 top-0 z-50 flex flex-col items-center gap-1 bg-amber-100/95 px-4 py-2 text-center text-sm font-medium text-amber-900 shadow backdrop-blur" style="padding-top: env(safe-area-inset-top, 12px)">
+      <span class="flex items-center gap-2">
+        <span class="h-3 w-3 animate-spin rounded-full border-2 border-amber-900/30 border-t-amber-900"></span>
+        {#if refdb.status === 'downloading'}
+          Downloading data… {refdb.progress}%
+        {:else}
+          Preparing data…
+        {/if}
+      </span>
+      {#if refdb.imgProgress}
+        <span class="text-xs font-normal text-amber-800/80">Caching images {refdb.imgProgress.done}/{refdb.imgProgress.total}</span>
+      {/if}
+    </div>
+  {:else if refdb.imgProgress}
+    <div class="fixed bottom-12 left-1/2 z-40 -translate-x-1/2 rounded-full bg-green-900 px-4 py-2 text-xs font-medium text-white shadow-lg" style="margin-bottom: env(safe-area-inset-bottom, 0px)">
+      <span class="flex items-center gap-2">
+        <span class="h-3 w-3 animate-spin rounded-full border-2 border-white/30 border-t-white"></span>
+        Caching images {refdb.imgProgress.done}/{refdb.imgProgress.total}
+      </span>
+    </div>
+  {/if}
   <div class="fixed bottom-1 left-2 z-50 flex items-center gap-2 text-[10px] leading-none" style="padding-bottom: env(safe-area-inset-bottom, 0px)">
     <span class="select-text text-green-800/40">{BUILD_HASH}{BUILD_TIME ? ` · ${BUILD_TIME}` : ''}</span>
     <button

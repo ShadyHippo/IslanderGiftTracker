@@ -18,6 +18,7 @@ const state = $state({
   progress: 0,
   error: null as string | null,
   db: null as Database | null,
+  imgProgress: null as { done: number; total: number } | null,
 });
 
 export function getRefDbState() {
@@ -223,11 +224,15 @@ async function preCacheImages(): Promise<void> {
     if (cached.hash === urlsKey) return; // already cached
 
     const sw = navigator.serviceWorker.controller;
+    state.imgProgress = { done: 0, total: urls.length };
     sw.postMessage({ type: 'CACHE_IMAGES', urls });
 
-    // Listen for completion
+    // Listen for progress + completion
     const onMsg = (e: MessageEvent) => {
-      if (e.data?.type === 'IMAGE_COMPLETE') {
+      if (e.data?.type === 'IMAGE_PROGRESS') {
+        state.imgProgress = { done: e.data.done ?? 0, total: e.data.total ?? urls.length };
+      } else if (e.data?.type === 'IMAGE_COMPLETE') {
+        state.imgProgress = null;
         navigator.serviceWorker.removeEventListener('message', onMsg);
         // Store the fingerprint so we don't re-cache
         openIdb().then((idb) => {

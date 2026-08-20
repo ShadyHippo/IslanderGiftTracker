@@ -179,7 +179,7 @@ export async function loadReferenceDb(): Promise<void> {
     state.status = 'ready';
 
     // Trigger image pre-caching in background (non-blocking)
-    preCacheImages(manifest.imageHash);
+    preCacheImages();
   } catch (e) {
     state.status = 'error';
     state.error = e instanceof Error ? e.message : 'failed to load reference data';
@@ -189,11 +189,29 @@ export async function loadReferenceDb(): Promise<void> {
 const IMG_IDB_STORE = 'imgcache';
 const IMG_IDB_KEY = 'hash';
 
-async function preCacheImages(imageHash: string | undefined): Promise<void> {
-  if (!imageHash || !navigator.serviceWorker?.controller) return;
+async function preCacheImages(): Promise<void> {
+  if (!navigator.serviceWorker?.controller) return;
 
-  // Check if images are already cached for this hash
   try {
+    // Fetch image manifest and send every image URL to the service worker so
+    // the whole library is available offline on first load.
+    const res = await fetch('/img/manifest.json', { cache: 'no-store' });
+    if (!res.ok) return;
+    const manifest = await res.json();
+    // The served manifest is a list of { name, category, variation, url }.
+    // (Older builds served { urls: [...] }.) Normalize to a plain URL list.
+    const urls: string[] = Array.isArray(manifest)
+      ? manifest.map((i) => i?.url).filter(Boolean)
+      : Array.isArray(manifest?.urls)
+        ? manifest.urls
+        : [];
+    if (!urls.length) return;
+
+    // Skip if we already cached this exact URL set (fingerprint = sorted urls,
+    // avoids a crypto.subtle dependency on plain-http LAN/Tailscale hosts).
+    const urlsKey = [...urls].sort().join('\n');
+
+    // Check if images are already cached for this URL set
     const db = await openIdb();
     const cached = await new Promise<{ hash?: string }>((resolve) => {
       const tx = db.transaction(IMG_IDB_STORE, 'readonly');
@@ -202,25 +220,19 @@ async function preCacheImages(imageHash: string | undefined): Promise<void> {
       req.onerror = () => resolve({});
       tx.oncomplete = () => db.close();
     });
-    if (cached.hash === imageHash) return; // already cached
-
-    // Fetch image manifest and send to service worker
-    const res = await fetch('/img/manifest.json', { cache: 'no-store' });
-    if (!res.ok) return;
-    const manifest = await res.json();
-    if (!manifest?.urls?.length) return;
+    if (cached.hash === urlsKey) return; // already cached
 
     const sw = navigator.serviceWorker.controller;
-    sw.postMessage({ type: 'CACHE_IMAGES', urls: manifest.urls });
+    sw.postMessage({ type: 'CACHE_IMAGES', urls });
 
     // Listen for completion
     const onMsg = (e: MessageEvent) => {
       if (e.data?.type === 'IMAGE_COMPLETE') {
         navigator.serviceWorker.removeEventListener('message', onMsg);
-        // Store the hash so we don't re-cache
+        // Store the fingerprint so we don't re-cache
         openIdb().then((idb) => {
           const tx2 = idb.transaction(IMG_IDB_STORE, 'readwrite');
-          tx2.objectStore(IMG_IDB_STORE).put({ hash: imageHash }, IMG_IDB_KEY);
+          tx2.objectStore(IMG_IDB_STORE).put({ hash: urlsKey }, IMG_IDB_KEY);
           tx2.oncomplete = () => idb.close();
         });
       }

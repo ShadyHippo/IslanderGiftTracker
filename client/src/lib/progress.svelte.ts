@@ -54,6 +54,22 @@ function scheduleSave() {
   }, AUTOSAVE_MS);
 }
 
+/**
+ * Persist the current progress db to IndexedDB immediately (fire-and-forget).
+ * Called on every edit so a mutation survives even if the tab is killed before
+ * the debounced server sync runs — online or offline.
+ */
+function persistLocal(): void {
+  const db = state.db;
+  if (!db) return;
+  try {
+    const bytes = db.export();
+    void idbSaveProgress(bytes.buffer);
+  } catch {
+    // non-critical
+  }
+}
+
 /** Persist raw bytes to IndexedDB so data survives offline tab close. */
 const PROG_IDB = 'acnh';
 const PROG_STORE = 'progress';
@@ -73,7 +89,7 @@ function openProgIdb(): Promise<IDBDatabase> {
   });
 }
 
-async function idbSaveProgress(bytes: ArrayBuffer): Promise<void> {
+async function idbSaveProgress(bytes: ArrayBufferLike): Promise<void> {
   try {
     const db = await openProgIdb();
     return new Promise((resolve, reject) => {
@@ -190,6 +206,8 @@ export function toggleGifted(villager: string, item: string): void {
   state.dirty = true;
   state.error = null;
   pendingMutation = true;
+  // Persist locally NOW so the edit is safe offline, then sync to server.
+  persistLocal();
   scheduleSave();
 }
 
@@ -259,6 +277,8 @@ function flipFlag(name: string, col: 'favorite' | 'on_island') {
   state.dirty = true;
   state.error = null;
   pendingMutation = true;
+  // Persist locally NOW so the edit is safe offline, then sync to server.
+  persistLocal();
   scheduleSave();
 }
 

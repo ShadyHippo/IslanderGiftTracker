@@ -11,6 +11,12 @@
   const refdb = getRefDbState();
   const progress = getProgressState();
 
+  // Build marker so the user can confirm which deploy is running.
+  const BUILD_HASH: string =
+    typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev';
+  const BUILD_TIME: string =
+    typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : '';
+
   onMount(() => {
     void checkSession();
   });
@@ -82,4 +88,7 @@
       </p>
     </div>
   {/if}
+  <p class="pointer-events-none fixed bottom-1 left-2 z-50 select-text text-[10px] leading-none text-green-800/40" style="padding-bottom: env(safe-area-inset-bottom, 0px)">
+    {BUILD_HASH}{BUILD_TIME ? ` · ${BUILD_TIME}` : ''}
+  </p>
 {/if}

@@ -14,7 +14,7 @@ server-build:
 
 # Client — node/pnpm run ONLY inside containers (host stays clean).
 # $$(...) = expanded by the shell at runtime; $(...) would be eaten by make.
-CLIENT_MOUNTS = -u "$$(id -u):$$(id -g)" -e HOME=/tmp -e COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
+CLIENT_MOUNTS = -u "$$(id -u):$$(id -g)" -e HOME=/tmp -e COREPACK_ENABLE_DOWNLOAD_PROMPT=0 -e GIT_HASH="$$(git rev-parse --short HEAD 2>/dev/null || echo dev)" \
 	-v "$$PWD/client/.pnpm-store:/tmp/.local/share/pnpm" -v "$$PWD/client:/client" -w /client
 CLIENT = docker run --rm $(CLIENT_MOUNTS) node:24-alpine sh -c "mkdir -p /tmp/pnpm && npm install -g --prefix /tmp/pnpm --no-fund --no-audit pnpm@11.21.0 >/dev/null 2>&1; export PATH=/tmp/pnpm/bin:$$PATH; pnpm --version;
 
@@ -44,7 +44,7 @@ client-dev: client-dirs
 
 # Docker image for deployment
 docker:
-	docker build -t acnh-server server/deploy
+	docker build --build-arg GIT_HASH=$$(git rev-parse --short HEAD 2>/dev/null || echo dev) -t acnh-server server/deploy
 
 # Create/update a user (server must be built first)
 # Usage: make createuser USER=alice PASS=secret123

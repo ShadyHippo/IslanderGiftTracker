@@ -14,7 +14,8 @@ WORKDIR /client
 COPY client/package.json client/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY client/ .
-RUN pnpm build
+ARG GIT_HASH=dev
+RUN GIT_HASH=$GIT_HASH pnpm build
 
 # ── Stage 3: Reference DB + images ─────────────────────────────────
 FROM python:3.12-slim AS refdb

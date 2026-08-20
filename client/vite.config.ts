@@ -19,7 +19,19 @@ function shortHash(): string {
 }
 
 const BUILD_HASH = shortHash();
-const BUILD_TIME = new Date().toISOString().slice(0, 16).replace('T', ' ');
+const BUILD_TIME =
+  new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+    .format(new Date())
+    .replace(',', '')
+    .replace(/\//g, '-') + ' ET';
 
 export default defineConfig({
   define: {

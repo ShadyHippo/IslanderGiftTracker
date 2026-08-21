@@ -18,15 +18,20 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
-// Activate: clean old caches
+// Activate: clean old caches + purge entries that must never be cached
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(
-        keys
+      Promise.all([
+        ...keys
           .filter((k) => k !== SHELL_CACHE && k !== DB_CACHE && k !== IMG_CACHE)
-          .map((k) => caches.delete(k))
-      )
+          .map((k) => caches.delete(k)),
+        // Older deploys cached these via the /img/ cache-first rule, serving
+        // stale manifests/zips across updates. Purge them on every activation.
+        caches.open(IMG_CACHE).then((cache) =>
+          Promise.all([cache.delete('/img/manifest.json'), cache.delete('/img/images.zip')])
+        ),
+      ])
     )
   );
   self.clients.claim();
@@ -49,6 +54,15 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Image manifest + install bundle: network-only, ALWAYS. Cache-first here
+  // poisoned updates (stale manifest sizes, stale zips) — these two must
+  // reflect the current deploy every single time. Checked BEFORE the /img/
+  // catch-all below.
+  if (url.pathname === '/img/manifest.json' || url.pathname === '/img/images.zip') {
+    event.respondWith(networkOnly(request));
+    return;
+  }
+
   // DB files: cache-first (versioned filenames, immutable)
   if (url.pathname.startsWith('/db/')) {
     event.respondWith(cacheFirst(request, DB_CACHE));
@@ -58,13 +72,6 @@ self.addEventListener('fetch', (event) => {
   // Images: cache-first with lazy caching
   if (url.pathname.startsWith('/img/')) {
     event.respondWith(cacheFirst(request, IMG_CACHE));
-    return;
-  }
-
-  // Image install bundle: never cache (client streams it with cache:'no-store'
-  // and extracts it into Cache Storage itself).
-  if (url.pathname === '/img/images.zip') {
-    event.respondWith(networkOnly(request));
     return;
   }
 

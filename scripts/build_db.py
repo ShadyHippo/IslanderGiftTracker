@@ -126,27 +126,35 @@ WEBP_QUALITY = 90
 
 
 def to_webp(png_path, webp_path):
-    """Convert a PNG file to WebP via ImageMagick. Returns True on success."""
+    """Convert a PNG file to WebP. Tries ImageMagick, then cwebp. Raises if
+    both are unavailable or fail — a broken webp pipeline must fail the build,
+    never silently serve PNGs."""
     import subprocess
     r = subprocess.run(["convert", png_path, "-quality", str(WEBP_QUALITY),
                         "-strip", webp_path], capture_output=True)
-    return r.returncode == 0 and os.path.exists(webp_path)
+    if r.returncode == 0 and os.path.exists(webp_path):
+        return True
+    r = subprocess.run(["cwebp", "-quiet", "-q", str(WEBP_QUALITY),
+                        png_path, "-o", webp_path], capture_output=True)
+    if r.returncode == 0 and os.path.exists(webp_path):
+        return True
+    raise RuntimeError(
+        f"webp conversion failed for {png_path} "
+        f"(convert: {r.returncode}, cwebp: {r.returncode}) — "
+        "is imagemagick/webp installed in the build image?"
+    )
 
 
 def save_image(img_dir, cat, stem, data, image_urls=None):
     """Write image bytes as PNG (pristine) + WebP (served). Returns the served
-    /img/...webp URL. cat is a directory (item category or villager name).
-    If WebP conversion fails, the PNG URL is served instead (graceful fallback)."""
+    /img/...webp URL. Raises on conversion failure — never falls back to PNG."""
     rel = os.path.join(sanitize_filename(cat), sanitize_filename(stem))
     png_path = os.path.join(img_dir, rel + '.png')
     os.makedirs(os.path.dirname(png_path), exist_ok=True)
     with open(png_path, 'wb') as f:
         f.write(data)
-    url = f'/img/{rel}.png'
-    if to_webp(png_path, os.path.join(img_dir, rel + '.webp')):
-        url = f'/img/{rel}.webp'
-    else:
-        print(f"    WARN: webp conversion failed for {rel}; serving PNG")
+    to_webp(png_path, os.path.join(img_dir, rel + '.webp'))
+    url = f'/img/{rel}.webp'
     if image_urls is not None:
         image_urls.append(url)
     return url
@@ -940,6 +948,7 @@ def main():
         zip_tmp = zip_path + '.tmp'
         if os.path.exists(zip_tmp):
             os.remove(zip_tmp)
+        total_bytes = 0
         with zipfile.ZipFile(zip_tmp, 'w', zipfile.ZIP_STORED, allowZip64=True) as zf:
             for root, _, files in os.walk(img_dir):
                 for fn in files:
@@ -947,15 +956,18 @@ def main():
                         continue
                     full = os.path.join(root, fn)
                     zf.write(full, os.path.relpath(full, img_dir))
+                    total_bytes += os.path.getsize(full)
         os.replace(zip_tmp, zip_path)
         zip_size = os.path.getsize(zip_path)
-        print(f"    img bundle: {os.path.basename(zip_path)} = {zip_size/1e6:.1f} MB")
+        print(f"    img bundle: {os.path.basename(zip_path)} = {zip_size/1e6:.1f} MB "
+              f"({total_bytes/1e6:.1f} MB extracted)")
 
         img_manifest_path = os.path.join(img_dir, 'manifest.json')
         manifest_tmp = img_manifest_path + '.tmp'
         with open(manifest_tmp, 'w') as f:
             json.dump({'hash': image_hash, 'count': len(image_urls),
                        'urls': image_urls, 'zipSize': zip_size,
+                       'totalBytes': total_bytes,
                        'zipName': 'images.zip'}, f)
         os.replace(manifest_tmp, img_manifest_path)
         print(f"    img manifest: {len(image_urls)} urls, hash={image_hash[:12]}…")

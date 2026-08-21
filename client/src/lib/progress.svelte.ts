@@ -32,8 +32,11 @@ const state = $state({
   db: null as Database | null,
   /** Bumped on every mutation so $derived callers re-query the db. */
   version: 0,
+  /** Unsynced edits exist (network badge amber until the server confirms). */
   dirty: false,
   saving: false,
+  /** The device-local copy is persisted (local badge green). */
+  localSaved: true,
   error: null as string | null,
   savedAt: null as string | null,
 });
@@ -55,18 +58,24 @@ function scheduleSave() {
 }
 
 /**
- * Persist the current progress db to IndexedDB immediately (fire-and-forget).
+ * Persist the current progress db to IndexedDB immediately.
  * Called on every edit so a mutation survives even if the tab is killed before
- * the debounced server sync runs — online or offline.
+ * the debounced server sync runs — online or offline. Writes are marked
+ * UNSYNCED: only a confirmed server upload clears that flag (see loadProgress).
  */
 function persistLocal(): void {
   const db = state.db;
   if (!db) return;
   try {
     const bytes = db.export();
-    void idbSaveProgress(bytes.buffer);
+    state.localSaved = false;
+    void idbSaveProgress(bytes.buffer, true)
+      .catch(() => {})
+      .finally(() => {
+        state.localSaved = true;
+      });
   } catch {
-    // non-critical
+    state.localSaved = true;
   }
 }
 
@@ -89,26 +98,40 @@ function openProgIdb(): Promise<IDBDatabase> {
   });
 }
 
-async function idbSaveProgress(bytes: ArrayBufferLike): Promise<void> {
+interface ProgRecord {
+  bytes: ArrayBufferLike;
+  /** True while local edits have not been confirmed by the server. */
+  unsynced: boolean;
+}
+
+async function idbSaveProgress(bytes: ArrayBufferLike, unsynced: boolean): Promise<void> {
   try {
     const db = await openProgIdb();
     return new Promise((resolve, reject) => {
       const tx = db.transaction(PROG_STORE, 'readwrite');
-      tx.objectStore(PROG_STORE).put(bytes, PROG_KEY);
+      tx.objectStore(PROG_STORE).put({ bytes, unsynced } satisfies ProgRecord, PROG_KEY);
       tx.oncomplete = () => { db.close(); resolve(); };
       tx.onerror = () => { db.close(); reject(tx.error); };
     });
   } catch { /* non-critical */ }
 }
 
-async function idbLoadProgress(): Promise<ArrayBuffer | null> {
+async function idbLoadProgress(): Promise<ProgRecord | null> {
   try {
     const db = await openProgIdb();
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const tx = db.transaction(PROG_STORE, 'readonly');
       const req = tx.objectStore(PROG_STORE).get(PROG_KEY);
-      req.onsuccess = () => { db.close(); resolve(req.result ?? null); };
-      req.onerror = () => { db.close(); reject(req.error); };
+      req.onsuccess = () => {
+        db.close();
+        // Legacy records were bare ArrayBuffers (no unsync flag) — treat them
+        // as unsynced so we push rather than risk clobbering unknown edits.
+        const r = req.result as ProgRecord | ArrayBuffer | undefined;
+        if (!r) return resolve(null);
+        if (r instanceof ArrayBuffer) return resolve({ bytes: r, unsynced: true });
+        resolve(r.bytes ? { bytes: r.bytes, unsynced: !!r.unsynced } : null);
+      };
+      req.onerror = () => { db.close(); resolve(null); };
     });
   } catch { return null; }
 }
@@ -119,7 +142,7 @@ export function flushProgressOnUnload(): void {
   if (!db || !state.dirty) return;
   const bytes = db.export();
   // Always persist to IndexedDB — survives offline tab close
-  void idbSaveProgress(bytes.buffer);
+  void idbSaveProgress(bytes.buffer, true);
   // Only attempt the server PUT when the network is up. Offline it can never
   // succeed, and an in-flight keepalive request during unload aborts the next
   // navigation (ERR_FAILED), preventing the app from reloading offline to
@@ -146,26 +169,37 @@ export async function loadProgress(): Promise<void> {
   state.error = null;
   const SQL = await initSql();
   try {
-    // Try server first; fall back to IndexedDB cache
-    let bytes: ArrayBuffer;
-    try {
-      bytes = await progressDownload();
-      // Got fresh data from server — update local cache
-      await idbSaveProgress(bytes);
-    } catch {
-      // Server unreachable — try local cache
-      const cached = await idbLoadProgress();
-      if (!cached || cached.byteLength === 0) {
-        throw new Error('Cannot reach server and no local backup found.');
+    // SINGLE DEVICE RULE: if this device has edits the server never confirmed,
+    // the LOCAL copy is the source of truth — push it up. Never pull the
+    // server's older copy over unsynced local edits; that loses data.
+    const cached = await idbLoadProgress();
+    let bytes: ArrayBufferLike;
+    let pushLocal = false;
+    if (cached?.unsynced && cached.bytes.byteLength > 0) {
+      bytes = cached.bytes;
+      pushLocal = true;
+    } else {
+      try {
+        bytes = await progressDownload();
+        // Got fresh data from server — update local cache (in sync)
+        await idbSaveProgress(bytes, false);
+      } catch {
+        // Server unreachable — try local cache
+        if (!cached || cached.bytes.byteLength === 0) {
+          throw new Error('Cannot reach server and no local backup found.');
+        }
+        bytes = cached.bytes;
       }
-      bytes = cached;
     }
     const db = new SQL.Database(new Uint8Array(bytes));
     db.exec(SCHEMA);
     state.db = db;
     state.version++;
-    state.dirty = false;
+    state.dirty = pushLocal;
     state.status = 'ready';
+    // Unsynced local edits: push them to the server now (no-op while offline;
+    // the 'online' listener and next edit retry later).
+    if (pushLocal) void saveProgress();
   } catch (e) {
     state.status = 'error';
     state.error = e instanceof Error ? e.message : 'failed to load progress data';
@@ -205,45 +239,39 @@ export function toggleGifted(villager: string, item: string): void {
   state.version++;
   state.dirty = true;
   state.error = null;
-  pendingMutation = true;
   // Persist locally NOW so the edit is safe offline, then sync to server.
   persistLocal();
   scheduleSave();
 }
 
-let retryTimer: ReturnType<typeof setTimeout> | null = null;
-let pendingMutation = false;
-
 /**
- * Save progress to server + IndexedDB. On failure, retry once after 2s.
- * Further retries only happen when the user triggers a new mutation.
+ * Persist locally (always) and sync to the server (only when online).
+ * Offline: the local copy is marked unsynced and the network badge simply
+ * stays amber ("pending") — we never attempt a PUT that cannot succeed.
  */
 export async function saveProgress(): Promise<void> {
   const db = state.db;
   if (!db || state.saving) return;
-  state.saving = true;
-  state.error = null;
-  pendingMutation = false;
   const bytes = db.export();
+  // Local first — data is safe on this device no matter what happens next.
+  await idbSaveProgress(bytes.buffer, true);
+  state.localSaved = true;
+  if (!navigator.onLine) {
+    state.dirty = true; // stays amber until we're back online
+    return;
+  }
+  state.saving = true;
   try {
-    // Always persist locally first — data is safe even if server is down
-    await idbSaveProgress(bytes.buffer);
     await progressUpload(bytes);
+    // Server confirmed — the local copy is now in sync
+    await idbSaveProgress(bytes.buffer, false);
     state.dirty = false;
     state.savedAt = new Date().toLocaleTimeString();
-  } catch (e) {
-    state.error = 'Save failed — will retry on next edit';
+  } catch {
+    // Stay amber; re-sync happens on the next edit or when the browser fires
+    // 'online' (App.svelte). No scary error text for routine offline/failed
+    // syncs — the badge color IS the status.
     state.dirty = true;
-    // Don't auto-retry on a timer: a keepalive/in-flight PUT during unload
-    // aborts the next navigation (ERR_FAILED), so an offline tab can't reload
-    // to recover the IndexedDB copy. Re-sync happens on the next edit or when
-    // the browser fires 'online' (App.svelte). Keep a single retry after 2s
-    // only if no new mutation superseded this save.
-    if (retryTimer) clearTimeout(retryTimer);
-    retryTimer = setTimeout(() => {
-      retryTimer = null;
-      if (!pendingMutation && navigator.onLine) void saveProgress();
-    }, 2000);
   } finally {
     state.saving = false;
   }
@@ -276,7 +304,6 @@ function flipFlag(name: string, col: 'favorite' | 'on_island') {
   state.version++;
   state.dirty = true;
   state.error = null;
-  pendingMutation = true;
   // Persist locally NOW so the edit is safe offline, then sync to server.
   persistLocal();
   scheduleSave();

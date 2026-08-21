@@ -89,9 +89,10 @@
           </p>
         {/if}
         <p class="mt-2 text-xs leading-relaxed text-green-600">
-          Keeps every image available offline, on this device. Tip: add this page to your home
-          screen first (browser menu → “Add to Home screen” / “Install”) so it runs like an app
-          in its own window.
+          Downloads ~{install.sizeMB} MB · uses ~{install.onDeviceMB} MB of space on this device,
+          keeping every image available offline. Tip: add this page to your home screen first
+          (browser menu → “Add to Home screen” / “Install”) so it runs like an app in its own
+          window.
         </p>
       </div>
     {:else if install.installed}

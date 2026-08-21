@@ -19,7 +19,7 @@ RUN GIT_HASH=$GIT_HASH pnpm build
 
 # ── Stage 3: Reference DB + images ─────────────────────────────────
 FROM python:3.12-slim AS refdb
-RUN apt-get update && apt-get install -y --no-install-recommends gzip imagemagick && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends gzip imagemagick webp && rm -rf /var/lib/apt/lists/*
 WORKDIR /build
 COPY scripts/ scripts/
 COPY res/ res/

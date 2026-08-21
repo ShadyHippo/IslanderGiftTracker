@@ -8,11 +8,13 @@ const pass = process.env.E2E_PASS || 'devpass';
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 390, height: 844 } }); // iPhone-ish
 
-// Autosave status indicator (passive pill in App.svelte): 'Unsaved changes'
-// while debouncing, then 'Saved hh:mm:ss' after the upload completes.
+// Autosave status: two round badges — local must be 'saved' and network
+// 'synced' once the debounced upload completes.
 const waitSaved = () =>
   page.waitForFunction(
-    () => document.querySelector('[data-save-status]')?.textContent?.trim().startsWith('Saved '),
+    () =>
+      document.querySelector('[data-save-local]')?.getAttribute('data-save-local') === 'saved' &&
+      document.querySelector('[data-save-network]')?.getAttribute('data-save-network') === 'synced',
     null,
     { timeout: 15000 },
   );

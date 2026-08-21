@@ -17,7 +17,10 @@ interface InstallState {
   offer: boolean;
   /** This device has the current bundle in Cache Storage. */
   installed: boolean;
+  /** Download size (db + zip), megabytes. */
   sizeMB: number;
+  /** Space the extracted images occupy on device, megabytes. */
+  onDeviceMB: number;
   progress: number;
   detail: string;
   error: string | null;
@@ -28,6 +31,7 @@ const install = $state<InstallState>({
   offer: false,
   installed: false,
   sizeMB: 0,
+  onDeviceMB: 0,
   progress: 0,
   detail: '',
   error: null,
@@ -84,11 +88,16 @@ export async function checkInstall(): Promise<void> {
       latest: number;
       references?: { version: number; size: number }[] | null;
     };
-    const imgManifest = (await imgRes.json()) as { hash?: string; zipSize?: number };
+    const imgManifest = (await imgRes.json()) as {
+      hash?: string;
+      zipSize?: number;
+      totalBytes?: number;
+    };
     const dbEntry = dbManifest.references?.find((r) => r.version === dbManifest.latest);
     const dbSize = dbEntry?.size ?? 0;
     const zipSize = imgManifest.zipSize ?? 0;
     install.sizeMB = Math.max(1, Math.round((dbSize + zipSize) / 1048576));
+    install.onDeviceMB = Math.max(1, Math.round((dbSize + (imgManifest.totalBytes ?? zipSize)) / 1048576));
     currentHash = imgManifest.hash ?? '';
     install.installed = !!currentHash && (await imgCachedHash()) === currentHash;
     install.offer = !!currentHash && !install.installed;
@@ -157,6 +166,7 @@ export async function runInstall(): Promise<void> {
     const files: UnzipFile[] = [];
     const unzip = new Unzip((file) => files.push(file));
     unzip.register(AsyncUnzipInflate);
+    let failed = 0;
     // Feed in chunks: a single multi-MB push overflows the stack inside fflate.
     const CHUNK = 1 << 20;
     for (let off = 0; off < data.length; off += CHUNK) {
@@ -183,11 +193,24 @@ export async function runInstall(): Promise<void> {
         });
         await cache.put('/img/' + files[i].name, new Response(bytes.buffer as ArrayBuffer, { headers: { 'Content-Type': 'image/webp' } }));
       } catch {
-        // skip a bad entry rather than abort the whole install
+        failed++;
       }
       install.progress = 65 + 33 * ((i + 1) / Math.max(files.length, 1));
     }
+    // A handful of failures means device storage gave out mid-install — that
+    // must NEVER masquerade as success (it leaves a half-empty offline cache).
+    if (failed >= Math.max(5, Math.ceil(files.length * 0.001))) {
+      throw new Error(
+        `${failed} of ${files.length} images could not be stored — ` +
+        'your device may be out of space. Free up room and try again.',
+      );
+    }
     install.progress = 98;
+
+    // Purge side-effect copies an older service worker may have made (the zip
+    // is ~200 MB of dead weight, and a stale manifest poisons future updates).
+    await cache.delete('/img/images.zip');
+    await cache.delete('/img/manifest.json');
 
     // 4) Mark installed
     if (!currentHash) {

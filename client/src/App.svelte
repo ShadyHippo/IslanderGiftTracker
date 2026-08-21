@@ -6,6 +6,7 @@
   import { getProgressState, loadProgress, flushProgressOnUnload, saveProgress } from './lib/progress.svelte';
   import { getInstallState, checkInstall } from './lib/install.svelte';
   import Login from './lib/Login.svelte';
+  import SaveBadges from './lib/SaveBadges.svelte';
   import './lib/router';
 
   const session = getSession();
@@ -122,28 +123,8 @@
 {:else}
   <Router />
 
-  {#if progress.status === 'ready'}
-    <div class="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-1" style="padding-bottom: env(safe-area-inset-bottom, 0px)">
-      {#if progress.error}
-        <p class="rounded-lg bg-red-100 px-3 py-1 text-xs font-medium text-red-700">{progress.error}</p>
-      {/if}
-      <p
-        data-save-status
-        class="rounded-full px-4 py-2 text-sm font-semibold shadow-lg {progress.dirty
-          ? 'bg-amber-100 text-amber-800'
-          : 'bg-green-100 text-green-600'}"
-      >
-        {#if progress.saving}
-          Saving…
-        {:else if progress.dirty}
-          Unsaved changes
-        {:else if progress.savedAt}
-          Saved {progress.savedAt}
-        {:else}
-          Saved
-        {/if}
-      </p>
-    </div>
+    {#if progress.status === 'ready'}
+    <SaveBadges />
   {/if}
   {#if refdb.status === 'downloading' || refdb.status === 'initializing'}
     <div class="fixed inset-x-0 top-0 z-50 flex flex-col items-center gap-1 bg-amber-100/95 px-4 py-2 text-center text-sm font-medium text-amber-900 shadow backdrop-blur" style="padding-top: env(safe-area-inset-top, 12px)">

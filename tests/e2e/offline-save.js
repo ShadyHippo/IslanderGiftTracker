@@ -56,7 +56,11 @@ try {
     if (await btn.count()) {
       await btn.click();
       await page.waitForTimeout(2500);
-      LOG('pill after offline edit:', (await page.locator('[data-save-status]').textContent())?.trim());
+      const badges = await page.evaluate(() => ({
+        local: document.querySelector('[data-save-local]')?.getAttribute('data-save-local'),
+        network: document.querySelector('[data-save-network]')?.getAttribute('data-save-network'),
+      }));
+      LOG('badges after offline edit:', JSON.stringify(badges));
     }
     // inspect IndexedDB progress store NOW
     const idb = await page.evaluate(async () => {

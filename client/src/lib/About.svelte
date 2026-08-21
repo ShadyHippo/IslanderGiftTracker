@@ -38,13 +38,14 @@
         This app is not affiliated with or endorsed by Nintendo.
       </p>
 
-      <button
-        type="button"
-        title="Coming soon"
-        class="mb-3 w-full rounded-lg bg-[#FFDD00] px-4 py-2.5 text-base font-bold text-black transition-[filter] hover:brightness-95 focus:outline-none focus:ring-2 focus:ring-yellow-400"
+      <a
+        href="https://buymeacoffee.com/timvandyke"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="mb-3 block w-full rounded-lg bg-[#FFDD00] px-4 py-2.5 text-center text-base font-bold text-black no-underline transition-[filter] hover:brightness-95 focus:outline-none focus:ring-2 focus:ring-yellow-400"
       >
         ☕ Buy me a coffee
-      </button>
+      </a>
 
       <button
         type="button"

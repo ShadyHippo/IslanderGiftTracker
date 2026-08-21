@@ -33,8 +33,13 @@ try {
     console.error('FAIL: About popup missing the one-device warning');
     process.exit(1);
   }
-  if (!(await page.locator('button:has-text("Buy me a coffee")').count())) {
+  if (!(await page.locator('[data-about-modal] a:has-text("Buy me a coffee")').count())) {
     console.error('FAIL: About popup missing Buy me a coffee button');
+    process.exit(1);
+  }
+  const bmcHref = await page.getAttribute('[data-about-modal] a:has-text("Buy me a coffee")', 'href');
+  if (!bmcHref || !bmcHref.startsWith('https://buymeacoffee.com/')) {
+    console.error(`FAIL: coffee button href unexpected: ${bmcHref}`);
     process.exit(1);
   }
   await page.click('[data-about-close]');

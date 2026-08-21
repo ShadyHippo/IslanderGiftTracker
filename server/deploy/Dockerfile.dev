@@ -1,0 +1,37 @@
+# Dev variant of deploy/Dockerfile — NO refdb stage. The full build spends an
+# hour+ re-fetching Nookipedia images inside the image, which local dev never
+# uses anyway: docker-compose.dev.yml bind-mounts ./dev-data over /data, and
+# ./client/dist over /client-dist. Only the Go binary is needed from this
+# image; everything else comes from the host.
+# NOTE: deliberately NO `# syntax=` directive — that pulls a frontend image
+# from Docker Hub on every build and breaks offline/when DNS flakes.
+FROM golang:1.25-alpine AS server
+WORKDIR /src
+COPY server/go.mod server/go.sum ./
+RUN go mod download
+COPY server/ .
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/acnh-server .
+
+# ── Stage 2: Svelte client (built into the image as a fallback only) ──
+FROM node:24-alpine AS client
+RUN corepack enable && corepack prepare pnpm@11.21.0 --activate
+WORKDIR /client
+COPY client/package.json client/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY client/ .
+ARG GIT_HASH=dev
+RUN GIT_HASH=$GIT_HASH pnpm build
+
+# ── Stage 3: Final image ────────────────────────────────────────────
+FROM alpine:3.20
+RUN adduser -D -H -u 10001 acnh && apk add --no-cache python3 curl
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD curl -fsS http://127.0.0.1:8080/health >/dev/null || exit 1
+COPY --from=server /out/acnh-server /usr/local/bin/acnh-server
+COPY --from=client /client/dist /app/client/dist
+RUN mkdir -p /data && chown -R acnh:acnh /app /data
+USER acnh
+ENV DATA_DIR=/data \
+    STATIC_DIR=/app/client/dist \
+    PORT=8080
+EXPOSE 8080
+ENTRYPOINT ["/usr/local/bin/acnh-server"]

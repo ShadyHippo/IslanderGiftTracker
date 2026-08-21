@@ -11,8 +11,8 @@
 services:
   acnh:
     build:
-      context: ./server
-      dockerfile: deploy/Dockerfile
+      context: .
+      dockerfile: server/deploy/Dockerfile.dev
     container_name: acnh-dev
     restart: unless-stopped
     # Run as the host user (uid 1000) so ./dev-data is writable. Dev-only file.

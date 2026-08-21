@@ -7,6 +7,8 @@ const browser = await chromium.launch();
 const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
 const page = await context.newPage();
 const LOG = (...a) => console.log('[offline]', ...a);
+// Returning-user path: About popup already dismissed on this device
+await page.addInitScript(() => localStorage.setItem('aboutDismissed', '1'));
 
 async function login() {
   if (await page.locator('input[name=username]').count()) {

@@ -5,7 +5,9 @@
   import { getRefDbState, loadReferenceDb } from './lib/refdb.svelte';
   import { getProgressState, loadProgress, flushProgressOnUnload, saveProgress } from './lib/progress.svelte';
   import { getInstallState, checkInstall } from './lib/install.svelte';
+  import { maybeAutoOpenAbout } from './lib/about.svelte';
   import Login from './lib/Login.svelte';
+  import About from './lib/About.svelte';
   import SaveBadges from './lib/SaveBadges.svelte';
   import './lib/router';
 
@@ -55,6 +57,7 @@
   onMount(() => {
     void checkSession();
     void checkInstall();
+    maybeAutoOpenAbout();
   });
 
   // The reference db is app-level state: load it as soon as we're logged in,
@@ -150,6 +153,8 @@
     </button>
   </div>
 {/if}
+
+<About />
 
 {#if install.phase === 'installing'}
   <!-- Full-screen takeover: blocks browsing so lazy loads don't compete with

@@ -8,6 +8,8 @@ const browser = await chromium.launch();
 const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
 const page = await context.newPage();
 const LOG = (...a) => console.log('[img-all]', ...a);
+// Returning-user path: About popup already dismissed on this device
+await page.addInitScript(() => localStorage.setItem('aboutDismissed', '1'));
 
 await page.goto(base, { waitUntil: 'domcontentloaded', timeout: 30000 });
 try {

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { login } from '../lib/session.svelte';
   import { getInstallState, runInstall } from '../lib/install.svelte';
+  import { openAbout } from './about.svelte';
 
   const install = getInstallState();
 
@@ -98,5 +99,15 @@
     {:else if install.installed}
       <p class="mt-4 text-center text-xs font-medium text-green-600">✓ Offline data installed</p>
     {/if}
+
+    <div class="mt-5 border-t border-green-100 pt-4">
+      <button
+        type="button"
+        onclick={openAbout}
+        class="w-full rounded-lg border border-green-300 bg-white px-4 py-2.5 text-sm font-semibold text-green-800 transition-colors hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-green-200"
+      >
+        About
+      </button>
+    </div>
   </form>
 </div>

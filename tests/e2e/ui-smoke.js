@@ -26,6 +26,21 @@ try {
     process.exit(1);
   }
 
+  // First visit: the About popup must appear and gate use until dismissed
+  await page.waitForSelector('[data-about-modal]', { timeout: 10000 });
+  const aboutText = (await page.textContent('[data-about-modal]')) || '';
+  if (!aboutText.includes('ONE DEVICE PER ACCOUNT')) {
+    console.error('FAIL: About popup missing the one-device warning');
+    process.exit(1);
+  }
+  if (!(await page.locator('button:has-text("Buy me a coffee")').count())) {
+    console.error('FAIL: About popup missing Buy me a coffee button');
+    process.exit(1);
+  }
+  await page.click('[data-about-close]');
+  await page.waitForSelector('[data-about-modal]', { state: 'detached', timeout: 5000 });
+  console.log('PASS: first-visit About popup shown and dismissed');
+
   // One-time offline install (login-page button): accept it when offered
   try {
     const btn = page.locator('button:has-text("Install offline data")');
@@ -255,6 +270,16 @@ try {
     process.exit(1);
   }
   console.log('PASS: refresh reuses the cached reference db (no re-download)');
+
+  // About popup must stay dismissed for the rest of the session/device
+  await page.goto(`${base}/`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+  await page.waitForSelector('input[placeholder^="Search by name"]', { timeout: 30000 });
+  await page.waitForTimeout(1000);
+  if (await page.locator('[data-about-modal]').count()) {
+    console.error('FAIL: About popup reappeared after dismissal');
+    process.exit(1);
+  }
+  console.log('PASS: About popup stays dismissed on reload');
 
   await page.screenshot({ path: '/e2e/smoke.png', fullPage: false });
   console.log('screenshot -> tests/e2e/smoke.png');

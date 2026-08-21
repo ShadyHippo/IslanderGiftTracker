@@ -121,7 +121,7 @@ func latestVersion(entries []refEntry) int {
 	return latest
 }
 
-var imgFileRe = regexp.MustCompile(`^[a-z0-9_]+\.png$`)
+var imgFileRe = regexp.MustCompile(`^[a-z0-9_]+\.(png|webp)$`)
 
 func (s *server) handleImageFile(w http.ResponseWriter, r *http.Request) {
 	category := r.PathValue("category")
@@ -155,6 +155,20 @@ func (s *server) handleImageManifest(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Write(data)
+}
+
+// handleImageBundle serves the single-file install bundle (stored zip of every
+// webp image). The client fetches it with cache:'no-store'; a revalidate policy
+// keeps it fresh across rebuilds while still being cacheable at a CDN edge.
+func (s *server) handleImageBundle(w http.ResponseWriter, r *http.Request) {
+	abs := filepath.Join(s.refDir, "img", "images.zip")
+	if _, err := os.Stat(abs); err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Cache-Control", "no-cache")
+	http.ServeFile(w, r, abs)
 }
 
 // imageHash returns the image hash from the meta table of the latest reference DB,

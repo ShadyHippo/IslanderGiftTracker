@@ -18,7 +18,6 @@ const state = $state({
   progress: 0,
   error: null as string | null,
   db: null as Database | null,
-  imgProgress: null as { done: number; total: number } | null,
 });
 
 export function getRefDbState() {
@@ -30,7 +29,7 @@ const IDB_STORE = 'refdb';
 const IDB_KEY = 'current';
 const IDB_VERSION = 2;
 
-function openIdb(): Promise<IDBDatabase> {
+export function openIdb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(IDB_NAME, IDB_VERSION);
     req.onupgradeneeded = () => {
@@ -178,72 +177,8 @@ export async function loadReferenceDb(): Promise<void> {
     const SQL = await initSql();
     state.db = new SQL.Database(new Uint8Array(inflated));
     state.status = 'ready';
-
-    // Trigger image pre-caching in background (non-blocking)
-    preCacheImages();
   } catch (e) {
     state.status = 'error';
     state.error = e instanceof Error ? e.message : 'failed to load reference data';
-  }
-}
-
-const IMG_IDB_STORE = 'imgcache';
-const IMG_IDB_KEY = 'hash';
-
-async function preCacheImages(): Promise<void> {
-  if (!navigator.serviceWorker?.controller) return;
-
-  try {
-    // Fetch image manifest and send every image URL to the service worker so
-    // the whole library is available offline on first load.
-    const res = await fetch('/img/manifest.json', { cache: 'no-store' });
-    if (!res.ok) return;
-    const manifest = await res.json();
-    // The served manifest is a list of { name, category, variation, url }.
-    // (Older builds served { urls: [...] }.) Normalize to a plain URL list.
-    const urls: string[] = Array.isArray(manifest)
-      ? manifest.map((i) => i?.url).filter(Boolean)
-      : Array.isArray(manifest?.urls)
-        ? manifest.urls
-        : [];
-    if (!urls.length) return;
-
-    // Skip if we already cached this exact URL set (fingerprint = sorted urls,
-    // avoids a crypto.subtle dependency on plain-http LAN/Tailscale hosts).
-    const urlsKey = [...urls].sort().join('\n');
-
-    // Check if images are already cached for this URL set
-    const db = await openIdb();
-    const cached = await new Promise<{ hash?: string }>((resolve) => {
-      const tx = db.transaction(IMG_IDB_STORE, 'readonly');
-      const req = tx.objectStore(IMG_IDB_STORE).get(IMG_IDB_KEY);
-      req.onsuccess = () => resolve(req.result ?? {});
-      req.onerror = () => resolve({});
-      tx.oncomplete = () => db.close();
-    });
-    if (cached.hash === urlsKey) return; // already cached
-
-    const sw = navigator.serviceWorker.controller;
-    state.imgProgress = { done: 0, total: urls.length };
-    sw.postMessage({ type: 'CACHE_IMAGES', urls });
-
-    // Listen for progress + completion
-    const onMsg = (e: MessageEvent) => {
-      if (e.data?.type === 'IMAGE_PROGRESS') {
-        state.imgProgress = { done: e.data.done ?? 0, total: e.data.total ?? urls.length };
-      } else if (e.data?.type === 'IMAGE_COMPLETE') {
-        state.imgProgress = null;
-        navigator.serviceWorker.removeEventListener('message', onMsg);
-        // Store the fingerprint so we don't re-cache
-        openIdb().then((idb) => {
-          const tx2 = idb.transaction(IMG_IDB_STORE, 'readwrite');
-          tx2.objectStore(IMG_IDB_STORE).put({ hash: urlsKey }, IMG_IDB_KEY);
-          tx2.oncomplete = () => idb.close();
-        });
-      }
-    };
-    navigator.serviceWorker.addEventListener('message', onMsg);
-  } catch {
-    // non-critical: images will be cached on-demand
   }
 }

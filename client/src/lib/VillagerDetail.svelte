@@ -43,7 +43,9 @@
   // Memoized per-group: only recompute when the query or group items change.
   function searchItems(group: GiftGroup): GiftIdea[] {
     if (!giftQ) return group.items;
-    return group.items.filter((i) => slugify(`${i.name} ${i.variation} ${i.category}`).includes(giftQ));
+    // Slugify the query too so multi-word searches ("wooden stool") match the
+    // slugified haystack ("wooden_stool_...").
+    return group.items.filter((i) => slugify(`${i.name} ${i.variation} ${i.category}`).includes(slugify(giftQ)));
   }
 
   function visibleItems(group: GiftGroup): GiftIdea[] {

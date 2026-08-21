@@ -119,6 +119,7 @@ func newMux(s *server) *http.ServeMux {
 	mux.HandleFunc("GET /db/manifest.json", s.handleManifest)
 	mux.HandleFunc("GET /db/{filename}", s.handleRefDownload)
 	mux.HandleFunc("GET /img/manifest.json", s.handleImageManifest)
+	mux.HandleFunc("GET /img/images.zip", s.handleImageBundle)
 	mux.HandleFunc("GET /img/{category}/{filename}", s.handleImageFile)
 	mux.Handle("/", spaHandler(filepath.Clean(s.cfg.staticDir)))
 	return mux

@@ -119,6 +119,39 @@ def maybe_thumb(fn, data):
     return t
 
 
+# WebP is what the client downloads (half the first-load size, visually
+# identical at q90). The original PNG is still written to disk as the pristine
+# reference so a webp bug can always be reverted.
+WEBP_QUALITY = 90
+
+
+def to_webp(png_path, webp_path):
+    """Convert a PNG file to WebP via ImageMagick. Returns True on success."""
+    import subprocess
+    r = subprocess.run(["convert", png_path, "-quality", str(WEBP_QUALITY),
+                        "-strip", webp_path], capture_output=True)
+    return r.returncode == 0 and os.path.exists(webp_path)
+
+
+def save_image(img_dir, cat, stem, data, image_urls=None):
+    """Write image bytes as PNG (pristine) + WebP (served). Returns the served
+    /img/...webp URL. cat is a directory (item category or villager name).
+    If WebP conversion fails, the PNG URL is served instead (graceful fallback)."""
+    rel = os.path.join(sanitize_filename(cat), sanitize_filename(stem))
+    png_path = os.path.join(img_dir, rel + '.png')
+    os.makedirs(os.path.dirname(png_path), exist_ok=True)
+    with open(png_path, 'wb') as f:
+        f.write(data)
+    url = f'/img/{rel}.png'
+    if to_webp(png_path, os.path.join(img_dir, rel + '.webp')):
+        url = f'/img/{rel}.webp'
+    else:
+        print(f"    WARN: webp conversion failed for {rel}; serving PNG")
+    if image_urls is not None:
+        image_urls.append(url)
+    return url
+
+
 # ---------------------------------------------------------------- xlsx parsing
 
 def load_workbook():
@@ -623,14 +656,9 @@ def build_house_data(db, sheets, no_images, img_dir=None, image_urls=None):
                 if not icon:
                     continue
                 if img_dir:
-                    iv_path = os.path.join(img_dir, sanitize_filename(villager),
-                                           sanitize_filename(hit["name"]) + '.png')
-                    os.makedirs(os.path.dirname(iv_path), exist_ok=True)
-                    with open(iv_path, 'wb') as ivf:
-                        ivf.write(icon)
+                    iv_url = save_image(img_dir, villager, hit["name"], icon, image_urls)
                     db.execute("INSERT OR REPLACE INTO house_item_images VALUES (?,?,?)",
-                               (villager, hit["name"],
-                                f'/img/{sanitize_filename(villager)}/{sanitize_filename(hit["name"])}.png'))
+                               (villager, hit["name"], iv_url))
                 else:
                     db.execute("INSERT OR REPLACE INTO house_item_images VALUES (?,?,?)",
                                (villager, hit["name"], sqlite3.Binary(icon)))
@@ -642,15 +670,8 @@ def build_house_data(db, sheets, no_images, img_dir=None, image_urls=None):
                              if (hit.get("var_raw") or "").strip().lower() in ("", "na", "none")
                              else hit["var_raw"]))
                 if img_dir:
-                    back_img_fn = sanitize_filename(hit["name"]) + (f'_{sanitize_filename(back_var)}' if back_var else '') + '.png'
-                    back_url = f'/img/{sanitize_filename(hit["category"])}/{back_img_fn}'
-                    # Write to the per-category directory to match the URL
-                    back_path = os.path.join(img_dir, sanitize_filename(hit["category"]), back_img_fn)
-                    os.makedirs(os.path.dirname(back_path), exist_ok=True)
-                    with open(back_path, 'wb') as bf:
-                        bf.write(icon)
-                    if image_urls is not None:
-                        image_urls.append(back_url)
+                    back_stem = sanitize_filename(hit["name"]) + (f'_{sanitize_filename(back_var)}' if back_var else '')
+                    back_url = save_image(img_dir, hit["category"], back_stem, icon, image_urls)
                     db.execute("INSERT OR REPLACE INTO images VALUES (?,?,?,?)",
                                (hit["category"], hit["name"], back_var, back_url))
                 else:
@@ -669,14 +690,9 @@ def build_house_data(db, sheets, no_images, img_dir=None, image_urls=None):
                     continue
                 if data:
                     if img_dir:
-                        hp_path = os.path.join(img_dir, sanitize_filename(villager),
-                                               kind + '.png')
-                        os.makedirs(os.path.dirname(hp_path), exist_ok=True)
-                        with open(hp_path, 'wb') as hpf:
-                            hpf.write(data)
+                        hp_url = save_image(img_dir, villager, kind, data, image_urls)
                         db.execute("INSERT OR REPLACE INTO house_images VALUES (?,?,?)",
-                                   (villager, kind,
-                                    f'/img/{sanitize_filename(villager)}/{kind}.png'))
+                                   (villager, kind, hp_url))
                     else:
                         db.execute("INSERT OR REPLACE INTO house_images VALUES (?,?,?)",
                                    (villager, kind, sqlite3.Binary(data)))
@@ -885,13 +901,8 @@ def main():
                 if data:
                     stats[cat][0] += 1
                     if img_dir:
-                        img_fn = sanitize_filename(name) + (f'_{sanitize_filename(var)}' if var else '') + '.png'
-                        img_path = os.path.join(img_dir, sanitize_filename(cat), img_fn)
-                        os.makedirs(os.path.dirname(img_path), exist_ok=True)
-                        with open(img_path, 'wb') as imgf:
-                            imgf.write(data)
-                        url = f'/img/{sanitize_filename(cat)}/{img_fn}'
-                        image_urls.append(url)
+                        stem = sanitize_filename(name) + (f'_{sanitize_filename(var)}' if var else '')
+                        url = save_image(img_dir, cat, stem, data, image_urls)
                         db.execute("INSERT OR REPLACE INTO images VALUES (?,?,?,?)",
                                    (cat, name, var, url))
                     else:
@@ -921,11 +932,31 @@ def main():
     if img_dir and image_urls:
         image_urls.sort()
         image_hash = hashlib.sha256('\n'.join(image_urls).encode()).hexdigest()
+
+        # Build the single-file install bundle: a stored zip (webp is already
+        # compressed, so deflate gains nothing) of every webp image at its
+        # /img/... path. The client downloads this ONE file on install.
+        zip_path = os.path.join(img_dir, 'images.zip')
+        zip_tmp = zip_path + '.tmp'
+        if os.path.exists(zip_tmp):
+            os.remove(zip_tmp)
+        with zipfile.ZipFile(zip_tmp, 'w', zipfile.ZIP_STORED, allowZip64=True) as zf:
+            for root, _, files in os.walk(img_dir):
+                for fn in files:
+                    if not fn.endswith('.webp'):
+                        continue
+                    full = os.path.join(root, fn)
+                    zf.write(full, os.path.relpath(full, img_dir))
+        os.replace(zip_tmp, zip_path)
+        zip_size = os.path.getsize(zip_path)
+        print(f"    img bundle: {os.path.basename(zip_path)} = {zip_size/1e6:.1f} MB")
+
         img_manifest_path = os.path.join(img_dir, 'manifest.json')
         manifest_tmp = img_manifest_path + '.tmp'
         with open(manifest_tmp, 'w') as f:
             json.dump({'hash': image_hash, 'count': len(image_urls),
-                       'urls': image_urls}, f)
+                       'urls': image_urls, 'zipSize': zip_size,
+                       'zipName': 'images.zip'}, f)
         os.replace(manifest_tmp, img_manifest_path)
         print(f"    img manifest: {len(image_urls)} urls, hash={image_hash[:12]}…")
 
@@ -972,7 +1003,9 @@ def main():
         img_count = sum(1 for _ in os.walk(img_dir) for f in _[2] if f.endswith('.png'))
         img_bytes = sum(os.path.getsize(os.path.join(d, f))
                         for d, _, files in os.walk(img_dir) for f in files if f.endswith('.png'))
-        print(f"  img/               : {img_count} files, {img_bytes/1e6:.1f} MB")
+        webp_bytes = sum(os.path.getsize(os.path.join(d, f))
+                         for d, _, files in os.walk(img_dir) for f in files if f.endswith('.webp'))
+        print(f"  img/               : {img_count} PNG (pristine) + {webp_bytes/1e6:.1f} MB WebP (served)")
     if thumb:
         print(f"  (images downscaled to max {thumb}px)")
 

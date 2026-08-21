@@ -22,6 +22,18 @@ async function login() {
 
 try {
   await page.goto(base, { waitUntil: 'domcontentloaded', timeout: 30000 });
+  // One-time install prompt (db + image bundle download): accept it so every
+  // image lands in Cache Storage and the offline checks below can pass.
+  try {
+    const dl = page.locator('button:has-text("Download")');
+    await dl.waitFor({ state: 'visible', timeout: 8000 });
+    LOG('install prompt shown, accepting…');
+    await dl.click();
+  } catch {
+    LOG('no install prompt (already installed)');
+  }
+  // Install extracts ~20k images; give it plenty of time before login appears.
+  await page.waitForSelector('input[name=username]', { timeout: 300000 });
   await login();
   LOG('load1 online loaded');
   await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 });

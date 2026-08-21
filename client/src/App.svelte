@@ -4,12 +4,14 @@
   import { getSession, checkSession } from './lib/session.svelte';
   import { getRefDbState, loadReferenceDb } from './lib/refdb.svelte';
   import { getProgressState, loadProgress, flushProgressOnUnload, saveProgress } from './lib/progress.svelte';
+  import { getInstallState, checkInstall, runInstall, skipInstall } from './lib/install.svelte';
   import Login from './lib/Login.svelte';
   import './lib/router';
 
   const session = getSession();
   const refdb = getRefDbState();
   const progress = getProgressState();
+  const install = getInstallState();
 
   // Build marker so the user can confirm which deploy is running.
   const BUILD_HASH: string =
@@ -51,6 +53,7 @@
 
   onMount(() => {
     void checkSession();
+    void checkInstall();
   });
 
   // The reference db is app-level state: load it as soon as we're logged in,
@@ -110,14 +113,58 @@
   });
 </script>
 
-{#if session.checking}
+{#if install.phase === 'checking'}
   <div class="flex min-h-screen items-center justify-center bg-green-50">
     <p class="text-green-700">Loading…</p>
   </div>
-{:else if !session.user}
-  <Login />
+{:else if install.phase === 'prompt'}
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-green-50 p-6">
+    <div class="w-full max-w-sm rounded-2xl border border-green-200 bg-white p-6 text-center shadow-sm">
+      <h1 class="mb-1 text-2xl font-bold text-green-800">ACNH Gift Tracker</h1>
+      <p class="mb-4 text-sm font-medium text-green-700">Install for offline use</p>
+      <p class="mb-4 text-sm leading-relaxed text-green-800">
+        To work like an app — with every image available offline — this device downloads about
+        <span class="font-semibold">{install.sizeMB} MB</span> once.
+        Add this page to your home screen first
+        <span class="text-green-700">(browser menu → “Add to Home screen” / “Install”)</span>
+        so it runs in its own window. Your island data stays on this device.
+      </p>
+      {#if install.error}
+        <p class="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{install.error}</p>
+      {/if}
+      <button
+        onclick={() => runInstall()}
+        class="mb-2 w-full rounded-lg bg-green-700 px-4 py-3 text-base font-semibold text-white shadow-sm transition-colors hover:bg-green-800 focus:outline-none focus:ring-2 focus:ring-green-300"
+      >
+        Download {install.sizeMB} MB
+      </button>
+      <button
+        onclick={skipInstall}
+        class="w-full rounded-lg px-4 py-2 text-sm font-medium text-green-700 hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-green-200"
+      >
+        Not now — browse online
+      </button>
+    </div>
+  </div>
+{:else if install.phase === 'installing'}
+  <div class="flex min-h-screen items-center justify-center bg-green-50 p-6">
+    <div class="w-full max-w-sm">
+      <p class="mb-3 text-center text-sm font-medium text-green-800">{install.detail}</p>
+      <div class="h-3 w-full overflow-hidden rounded-full bg-green-100">
+        <div class="h-full bg-green-700 transition-all duration-200" style="width: {install.progress}%"></div>
+      </div>
+      <p class="mt-2 text-center text-xs text-green-700">{Math.round(install.progress)}%</p>
+    </div>
+  </div>
 {:else}
-  <Router />
+  {#if session.checking}
+    <div class="flex min-h-screen items-center justify-center bg-green-50">
+      <p class="text-green-700">Loading…</p>
+    </div>
+  {:else if !session.user}
+    <Login />
+  {:else}
+    <Router />
 
   {#if progress.status === 'ready'}
     <div class="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-1" style="padding-bottom: env(safe-area-inset-bottom, 0px)">
@@ -152,16 +199,6 @@
           Preparing data…
         {/if}
       </span>
-      {#if refdb.imgProgress}
-        <span class="text-xs font-normal text-amber-800/80">Caching images {refdb.imgProgress.done}/{refdb.imgProgress.total}</span>
-      {/if}
-    </div>
-  {:else if refdb.imgProgress}
-    <div class="fixed bottom-12 left-1/2 z-40 -translate-x-1/2 rounded-full bg-green-900 px-4 py-2 text-xs font-medium text-white shadow-lg" style="margin-bottom: env(safe-area-inset-bottom, 0px)">
-      <span class="flex items-center gap-2">
-        <span class="h-3 w-3 animate-spin rounded-full border-2 border-white/30 border-t-white"></span>
-        Caching images {refdb.imgProgress.done}/{refdb.imgProgress.total}
-      </span>
     </div>
   {/if}
   <div class="fixed bottom-1 left-2 z-50 flex items-center gap-2 text-[10px] leading-none" style="padding-bottom: env(safe-area-inset-bottom, 0px)">
@@ -175,4 +212,5 @@
       {clearing ? 'Clearing…' : '⟳ Clear cache'}
     </button>
   </div>
-{/if}
+  {/if}
+  {/if}

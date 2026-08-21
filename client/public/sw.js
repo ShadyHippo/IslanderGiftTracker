@@ -61,6 +61,13 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Image install bundle: never cache (client streams it with cache:'no-store'
+  // and extracts it into Cache Storage itself).
+  if (url.pathname === '/img/images.zip') {
+    event.respondWith(networkOnly(request));
+    return;
+  }
+
   // SPA navigation (deep links like /villager/ace): always serve the cached
   // shell so the app loads offline from any route, not just '/'. Fall back to
   // index.html if the exact path isn't cached.

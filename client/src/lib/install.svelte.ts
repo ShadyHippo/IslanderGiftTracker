@@ -72,6 +72,24 @@ async function setImgCachedHash(hash: string): Promise<void> {
   }
 }
 
+function newUnzip(onFile: (file: UnzipFile) => void): Unzip {
+  const unzip = new Unzip(onFile);
+  unzip.register(AsyncUnzipInflate);
+  return unzip;
+}
+
+function concatChunks(chunks: Uint8Array[]): Uint8Array {
+  let total = 0;
+  for (const c of chunks) total += c.length;
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) {
+    out.set(c, off);
+    off += c.length;
+  }
+  return out;
+}
+
 export async function checkInstall(): Promise<void> {
   try {
     const [dbRes, imgRes] = await Promise.all([
@@ -134,74 +152,107 @@ export async function runInstall(): Promise<void> {
     await ensureRefDbReady();
     install.progress = 25;
 
-    // 2) Image bundle — 25..65%
-    install.detail = 'Downloading images…';
-    const res = await fetch('/img/images.zip', { cache: 'no-store' });
-    if (!res.ok) throw new Error(`image bundle download failed (${res.status})`);
-    const total = Number(res.headers.get('Content-Length')) || 0;
-    const reader = res.body!.getReader();
-    const chunks: Uint8Array[] = [];
-    let received = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (value) {
-        chunks.push(value);
-        received += value.length;
-        if (total > 0) install.progress = 25 + 40 * (received / total);
-      }
-    }
-    const data = new Uint8Array(received);
-    let off = 0;
-    for (const c of chunks) {
-      data.set(c, off);
-      off += c.length;
-    }
-    chunks.length = 0;
-    install.detail = 'Preparing images…';
-
-    // 3) Extract into Cache Storage — 65..98%
+    // 2) Image bundle — STREAMED. Network chunks feed straight into the
+    // unzipper and each image lands in Cache Storage as its bytes arrive, so
+    // peak memory is a few chunks + the largest single image — never the whole
+    // archive. A dropped connection resumes via HTTP Range (the server supports
+    // it) instead of restarting the ~200 MB download from byte zero.
     if (!('caches' in window)) throw new Error('offline storage is unavailable in this browser');
     const cache = await caches.open(IMG_CACHE);
-    const files: UnzipFile[] = [];
-    const unzip = new Unzip((file) => files.push(file));
-    unzip.register(AsyncUnzipInflate);
-    let failed = 0;
-    // Feed in chunks: a single multi-MB push overflows the stack inside fflate.
-    const CHUNK = 1 << 20;
-    for (let off = 0; off < data.length; off += CHUNK) {
-      const end = Math.min(off + CHUNK, data.length);
-      unzip.push(data.subarray(off, end), end >= data.length);
-    }
-    for (let i = 0; i < files.length; i++) {
-      try {
-        const bytes = await new Promise<Uint8Array>((resolve, reject) => {
-          const chunks: Uint8Array[] = [];
-          files[i].ondata = (err, chunk, final) => {
-            if (err) { reject(err); return; }
-            if (chunk) chunks.push(chunk);
-            if (final) {
-              let total = 0;
-              for (const c of chunks) total += c.length;
-              const out = new Uint8Array(total);
-              let off = 0;
-              for (const c of chunks) { out.set(c, off); off += c.length; }
-              resolve(out);
+
+    install.detail = 'Downloading images…';
+    let entriesFound = 0;
+    let entriesDone = 0;
+    let entriesFailed = 0;
+    // Writes are chained so only one cache.put runs at a time.
+    let putChain: Promise<void> = Promise.resolve();
+
+    const onFile = (file: UnzipFile) => {
+      entriesFound++;
+      const chunks: Uint8Array[] = [];
+      file.ondata = (err, chunk, final) => {
+        if (err) {
+          entriesFailed++;
+          return;
+        }
+        if (chunk) chunks.push(chunk);
+        if (final) {
+          const out = concatChunks(chunks);
+          chunks.length = 0;
+          const name = file.name;
+          putChain = putChain.then(async () => {
+            try {
+              await cache.put('/img/' + name, new Response(out.buffer as ArrayBuffer, {
+                headers: { 'Content-Type': 'image/webp' },
+              }));
+            } catch {
+              entriesFailed++;
             }
-          };
-          files[i].start();
-        });
-        await cache.put('/img/' + files[i].name, new Response(bytes.buffer as ArrayBuffer, { headers: { 'Content-Type': 'image/webp' } }));
-      } catch {
-        failed++;
+            entriesDone++;
+          });
+        }
+      };
+      file.start();
+    };
+
+    let received = 0;
+    let total = 0;
+    let unzip = newUnzip(onFile);
+    const MAX_ATTEMPTS = 5;
+
+    for (let attempt = 0; ; attempt++) {
+      const headers: Record<string, string> = {};
+      if (received > 0) headers.range = `bytes=${received}-`;
+      const res = await fetch('/img/images.zip', { headers, cache: 'no-store' });
+      if (!res.ok && res.status !== 206) {
+        throw new Error(`image bundle download failed (${res.status})`);
       }
-      install.progress = 65 + 33 * ((i + 1) / Math.max(files.length, 1));
+      if (res.status === 206 && received > 0) {
+        // Resumed: Content-Range carries the full length ("bytes a-b/total").
+        const cr = res.headers.get('Content-Range');
+        const t = cr ? Number(cr.split('/')[1]) : NaN;
+        if (Number.isFinite(t) && t > 0) total = t;
+      } else {
+        if (received > 0) {
+          // Server ignored Range and restarted from zero — re-create the
+          // extractor; splicing would corrupt it.
+          unzip = newUnzip(onFile);
+          received = 0;
+        }
+        total = Number(res.headers.get('Content-Length')) || 0;
+      }
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error('streaming not supported in this browser');
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value) {
+            unzip.push(value);
+            received += value.length;
+            if (total > 0) install.progress = 25 + 70 * Math.min(1, received / total);
+          }
+        }
+        unzip.push(new Uint8Array(0), true); // end of archive
+        break; // downloaded fully
+      } catch (e) {
+        if (attempt >= MAX_ATTEMPTS - 1) {
+          throw new Error(
+            `download interrupted at ${(received / 1048576).toFixed(0)} MB of ` +
+            `${(total / 1048576).toFixed(0)} MB — check your connection and try again ` +
+            '(it resumes where it left off)',
+          );
+        }
+        await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+      }
     }
-    // A handful of failures means device storage gave out mid-install — that
-    // must NEVER masquerade as success (it leaves a half-empty offline cache).
-    if (failed >= Math.max(5, Math.ceil(files.length * 0.001))) {
+
+    await putChain; // flush trailing writes
+    // A meaningful number of failures means device storage gave out mid-install
+    // — that must NEVER masquerade as success (it leaves a half-empty cache).
+    if (entriesFailed >= Math.max(5, Math.ceil(entriesFound * 0.001))) {
       throw new Error(
-        `${failed} of ${files.length} images could not be stored — ` +
+        `${entriesFailed} of ${entriesFound} images could not be stored — ` +
         'your device may be out of space. Free up room and try again.',
       );
     }

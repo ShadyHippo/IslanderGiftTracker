@@ -1,19 +1,27 @@
 const SW_VERSION = '__SW_VERSION__'; // replaced at build time with git hash
-const CACHE_NAME = 'acnh-v3';
-const SHELL_CACHE = 'acnh-shell-v3';
+// Shell files precached at install: injected at build time from dist/assets
+// (hashed filenames change every build, so the list must come from the build).
+const SHELL_ASSETS = __SHELL_ASSETS__;
+// Per-build shell cache: a new deploy gets a fresh name, and activate() purges
+// the previous one together with its stale asset generation.
+const SHELL_CACHE = 'acnh-shell-' + SW_VERSION;
 const DB_CACHE = 'acnh-db-v3';
 const IMG_CACHE = 'acnh-img-v3';
 
 // App shell: built assets from Vite + index.html
-const SHELL_ASSETS = [
-  '/',
-  '/index.html',
-];
 
-// Install: cache app shell
+// Install: cache app shell. Each file individually — one bad URL must not
+// fail the whole install. cache:'reload' bypasses the HTTP cache so we store
+// real bytes.
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(SHELL_CACHE).then((cache) => cache.addAll(SHELL_ASSETS))
+    caches.open(SHELL_CACHE).then((cache) =>
+      Promise.all(
+        SHELL_ASSETS.map((url) =>
+          cache.add(new Request(url, { cache: 'reload' })).catch(() => {})
+        )
+      )
+    )
   );
   self.skipWaiting();
 });
@@ -111,6 +119,12 @@ self.addEventListener('fetch', (event) => {
         }
       })(),
     );
+    return;
+  }
+
+  // Hashed build assets are immutable: cache-first once seen.
+  if (url.pathname.startsWith('/assets/')) {
+    event.respondWith(cacheFirst(request, SHELL_CACHE));
     return;
   }
 

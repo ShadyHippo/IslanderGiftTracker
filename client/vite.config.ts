@@ -53,10 +53,19 @@ export default defineConfig({
       name: 'sw-version',
       closeBundle() {
         try {
-          const { readFileSync, writeFileSync } = require('node:fs');
+          const { readFileSync, writeFileSync, existsSync, readdirSync } = require('node:fs');
           const { join } = require('node:path');
           const swPath = join(__dirname, 'dist', 'sw.js');
           let sw = readFileSync(swPath, 'utf8');
+          // Precache the actual built shell: hashed asset names change every
+          // build, so the list is generated from dist itself. Without this,
+          // a first-time visitor who goes offline gets a blank page — the
+          // assets were only requested before the SW could control the page.
+          const assetsDir = join(__dirname, 'dist', 'assets');
+          const assets = existsSync(assetsDir)
+            ? readdirSync(assetsDir).map((f) => `/assets/${f}`)
+            : [];
+          sw = sw.replace('__SHELL_ASSETS__', JSON.stringify(['/', '/index.html', ...assets]));
           sw = sw.replace('__SW_VERSION__', SW_VERSION);
           writeFileSync(swPath, sw);
         } catch {}

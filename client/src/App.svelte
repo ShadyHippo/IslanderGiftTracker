@@ -4,7 +4,7 @@
   import { getSession, checkSession } from './lib/session.svelte';
   import { getRefDbState, loadReferenceDb } from './lib/refdb.svelte';
   import { getProgressState, loadProgress, flushProgressOnUnload, saveProgress } from './lib/progress.svelte';
-  import { getInstallState, checkInstall, runInstall, skipInstall } from './lib/install.svelte';
+  import { getInstallState, checkInstall } from './lib/install.svelte';
   import Login from './lib/Login.svelte';
   import './lib/router';
 
@@ -113,58 +113,14 @@
   });
 </script>
 
-{#if install.phase === 'checking'}
+{#if session.checking}
   <div class="flex min-h-screen items-center justify-center bg-green-50">
     <p class="text-green-700">Loading…</p>
   </div>
-{:else if install.phase === 'prompt'}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-green-50 p-6">
-    <div class="w-full max-w-sm rounded-2xl border border-green-200 bg-white p-6 text-center shadow-sm">
-      <h1 class="mb-1 text-2xl font-bold text-green-800">ACNH Gift Tracker</h1>
-      <p class="mb-4 text-sm font-medium text-green-700">Install for offline use</p>
-      <p class="mb-4 text-sm leading-relaxed text-green-800">
-        To work like an app — with every image available offline — this device downloads about
-        <span class="font-semibold">{install.sizeMB} MB</span> once.
-        Add this page to your home screen first
-        <span class="text-green-700">(browser menu → “Add to Home screen” / “Install”)</span>
-        so it runs in its own window. Your island data stays on this device.
-      </p>
-      {#if install.error}
-        <p class="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{install.error}</p>
-      {/if}
-      <button
-        onclick={() => runInstall()}
-        class="mb-2 w-full rounded-lg bg-green-700 px-4 py-3 text-base font-semibold text-white shadow-sm transition-colors hover:bg-green-800 focus:outline-none focus:ring-2 focus:ring-green-300"
-      >
-        Download {install.sizeMB} MB
-      </button>
-      <button
-        onclick={skipInstall}
-        class="w-full rounded-lg px-4 py-2 text-sm font-medium text-green-700 hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-green-200"
-      >
-        Not now — browse online
-      </button>
-    </div>
-  </div>
-{:else if install.phase === 'installing'}
-  <div class="flex min-h-screen items-center justify-center bg-green-50 p-6">
-    <div class="w-full max-w-sm">
-      <p class="mb-3 text-center text-sm font-medium text-green-800">{install.detail}</p>
-      <div class="h-3 w-full overflow-hidden rounded-full bg-green-100">
-        <div class="h-full bg-green-700 transition-all duration-200" style="width: {install.progress}%"></div>
-      </div>
-      <p class="mt-2 text-center text-xs text-green-700">{Math.round(install.progress)}%</p>
-    </div>
-  </div>
+{:else if !session.user}
+  <Login />
 {:else}
-  {#if session.checking}
-    <div class="flex min-h-screen items-center justify-center bg-green-50">
-      <p class="text-green-700">Loading…</p>
-    </div>
-  {:else if !session.user}
-    <Login />
-  {:else}
-    <Router />
+  <Router />
 
   {#if progress.status === 'ready'}
     <div class="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-1" style="padding-bottom: env(safe-area-inset-bottom, 0px)">
@@ -212,5 +168,19 @@
       {clearing ? 'Clearing…' : '⟳ Clear cache'}
     </button>
   </div>
-  {/if}
-  {/if}
+{/if}
+
+{#if install.phase === 'installing'}
+  <!-- Full-screen takeover: blocks browsing so lazy loads don't compete with
+       the bundle download on the server's uplink. Overlays (not replaces)
+       whatever is underneath, keeping the login form state intact. -->
+  <div class="fixed inset-0 z-[60] flex items-center justify-center bg-green-50/95 p-6 backdrop-blur-sm">
+    <div class="w-full max-w-sm">
+      <p class="mb-3 text-center text-sm font-medium text-green-800">{install.detail}</p>
+      <div class="h-3 w-full overflow-hidden rounded-full bg-green-100">
+        <div class="h-full bg-green-700 transition-all duration-200" style="width: {install.progress}%"></div>
+      </div>
+      <p class="mt-2 text-center text-xs text-green-700">{Math.round(install.progress)}%</p>
+    </div>
+  </div>
+{/if}

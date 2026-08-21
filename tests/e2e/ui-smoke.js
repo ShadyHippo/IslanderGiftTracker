@@ -24,17 +24,17 @@ try {
     process.exit(1);
   }
 
-  // One-time install prompt (db + image bundle): accept it when shown
+  // One-time offline install (login-page button): accept it when offered
   try {
-    const dl = page.locator('button:has-text("Download")');
-    await dl.waitFor({ state: 'visible', timeout: 8000 });
-    console.log('install prompt shown, accepting…');
-    await dl.click();
+    const btn = page.locator('button:has-text("Install offline data")');
+    await btn.waitFor({ state: 'visible', timeout: 8000 });
+    console.log('install offered, accepting…');
+    await btn.click();
+    await page.waitForSelector('text=Offline data installed', { timeout: 300000 });
   } catch {
-    console.log('no install prompt (already installed)');
+    console.log('no install offer (already installed or server unreachable)');
   }
-  // Install extracts ~20k images; give it plenty of time before login appears.
-  await page.waitForSelector('input[name=username]', { timeout: 300000 });
+  await page.waitForSelector('input[name=username]', { timeout: 30000 });
 
   // Login
   await page.fill('input[name=username]', user);

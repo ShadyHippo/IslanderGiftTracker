@@ -2,9 +2,9 @@ import { getRefDbState, loadReferenceDb, openIdb } from './refdb.svelte';
 import { Unzip, AsyncUnzipInflate, type UnzipFile } from 'fflate';
 
 // Image bundle install: download the db + one stored zip of every webp image,
-// extract into Cache Storage, and mark the device as installed. Runs BEFORE
-// login so the user can add the app to their home screen first (its own
-// context, its own cache) and accept the large one-time download.
+// extract into Cache Storage, and mark the device as installed. Offered on the
+// login screen (with a hint to add the app to the home screen first); never
+// gates the app — declining just means images cache lazily as they're viewed.
 
 const IMG_IDB_STORE = 'imgcache';
 const IMG_IDB_KEY = 'hash';
@@ -12,7 +12,11 @@ const IMG_IDB_KEY = 'hash';
 const IMG_CACHE = 'acnh-img-v3';
 
 interface InstallState {
-  phase: 'checking' | 'prompt' | 'installing' | 'done' | 'skipped';
+  phase: 'checking' | 'idle' | 'installing';
+  /** Server reachable AND this device doesn't have the current bundle yet. */
+  offer: boolean;
+  /** This device has the current bundle in Cache Storage. */
+  installed: boolean;
   sizeMB: number;
   progress: number;
   detail: string;
@@ -21,6 +25,8 @@ interface InstallState {
 
 const install = $state<InstallState>({
   phase: 'checking',
+  offer: false,
+  installed: false,
   sizeMB: 0,
   progress: 0,
   detail: '',
@@ -69,7 +75,9 @@ export async function checkInstall(): Promise<void> {
       fetch('/img/manifest.json', { cache: 'no-store' }),
     ]);
     if (!dbRes.ok || !imgRes.ok) {
-      install.phase = 'done';
+      // Server unreachable (or no bundle published): nothing to offer — an
+      // offline visitor must never see a download button that can't work.
+      install.phase = 'idle';
       return;
     }
     const dbManifest = (await dbRes.json()) as {
@@ -82,20 +90,13 @@ export async function checkInstall(): Promise<void> {
     const zipSize = imgManifest.zipSize ?? 0;
     install.sizeMB = Math.max(1, Math.round((dbSize + zipSize) / 1048576));
     currentHash = imgManifest.hash ?? '';
-    if (currentHash && (await imgCachedHash()) === currentHash) {
-      install.phase = 'done'; // already installed this exact bundle
-      return;
-    }
-    install.phase = 'prompt';
+    install.installed = !!currentHash && (await imgCachedHash()) === currentHash;
+    install.offer = !!currentHash && !install.installed;
+    install.phase = 'idle';
   } catch {
-    // Offline or server unreachable: nothing to prompt for. Fall through to
-    // whatever is cached (or the login screen); never block on the network.
-    install.phase = 'done';
+    // Offline or server unreachable: no offer, never block on the network.
+    install.phase = 'idle';
   }
-}
-
-export function skipInstall(): void {
-  install.phase = 'skipped';
 }
 
 async function ensureRefDbReady(): Promise<void> {
@@ -197,9 +198,11 @@ export async function runInstall(): Promise<void> {
     }
     if (currentHash) await setImgCachedHash(currentHash);
     install.progress = 100;
-    install.phase = 'done';
+    install.installed = true;
+    install.offer = false;
+    install.phase = 'idle';
   } catch (e) {
-    install.phase = 'prompt'; // allow retry
+    install.phase = 'idle'; // back to the login screen; error shows by the button
     install.error = e instanceof Error ? e.message : 'install failed';
   }
 }

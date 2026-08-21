@@ -1,5 +1,8 @@
 <script lang="ts">
   import { login } from '../lib/session.svelte';
+  import { getInstallState, runInstall } from '../lib/install.svelte';
+
+  const install = getInstallState();
 
   let username = $state('');
   let password = $state('');
@@ -70,5 +73,29 @@
     >
       {submitting ? 'Signing in…' : 'Sign in'}
     </button>
+
+    {#if install.offer}
+      <div class="mt-5 border-t border-green-100 pt-4">
+        <button
+          type="button"
+          onclick={() => runInstall()}
+          class="w-full rounded-lg border border-green-300 bg-green-50 px-4 py-2.5 text-sm font-semibold text-green-800 transition-colors hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-green-200"
+        >
+          Install offline data (~{install.sizeMB} MB)
+        </button>
+        {#if install.error}
+          <p class="mt-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+            {install.error}
+          </p>
+        {/if}
+        <p class="mt-2 text-xs leading-relaxed text-green-600">
+          Keeps every image available offline, on this device. Tip: add this page to your home
+          screen first (browser menu → “Add to Home screen” / “Install”) so it runs like an app
+          in its own window.
+        </p>
+      </div>
+    {:else if install.installed}
+      <p class="mt-4 text-center text-xs font-medium text-green-600">✓ Offline data installed</p>
+    {/if}
   </form>
 </div>

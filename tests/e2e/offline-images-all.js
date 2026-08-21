@@ -11,12 +11,13 @@ const LOG = (...a) => console.log('[img-all]', ...a);
 
 await page.goto(base, { waitUntil: 'domcontentloaded', timeout: 30000 });
 try {
-  const dl = page.locator('button:has-text("Download")');
-  await dl.waitFor({ state: 'visible', timeout: 8000 });
-  LOG('install prompt, accepting…');
-  await dl.click();
-} catch { LOG('already installed'); }
-await page.waitForSelector('input[name=username]', { timeout: 300000 });
+  const btn = page.locator('button:has-text("Install offline data")');
+  await btn.waitFor({ state: 'visible', timeout: 8000 });
+  LOG('install offered, accepting…');
+  await btn.click();
+  await page.waitForSelector('text=Offline data installed', { timeout: 300000 });
+} catch { LOG('no install offer (already installed)'); }
+await page.waitForSelector('input[name=username]', { timeout: 30000 });
 await page.fill('input[name=username]', user);
 await page.fill('input[name=password]', pass);
 await page.click('button[type=submit]');

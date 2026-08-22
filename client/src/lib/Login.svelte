@@ -45,7 +45,7 @@
         spellcheck="false"
         required
         placeholder="e.g. wife"
-        class="w-full rounded-lg border border-green-300 px-3 py-2.5 text-base text-green-900 placeholder-green-400 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200"
+        class="w-full rounded-lg border border-green-300 px-3 py-2.5 text-[17px] text-green-900 placeholder-green-400 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200"
       />
     </label>
 
@@ -57,7 +57,7 @@
         name="password"
         autocomplete="current-password"
         required
-        class="w-full rounded-lg border border-green-300 px-3 py-2.5 text-base text-green-900 placeholder-green-400 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200"
+        class="w-full rounded-lg border border-green-300 px-3 py-2.5 text-[17px] text-green-900 placeholder-green-400 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200"
       />
     </label>
 
@@ -100,14 +100,20 @@
       <p class="mt-4 text-center text-xs font-medium text-green-600">✓ Offline data installed</p>
     {/if}
 
-    <div class="mt-5 border-t border-green-100 pt-4">
+    <div class="mt-5 flex items-center justify-between gap-3 border-t border-green-100 pt-4">
       <button
         type="button"
         onclick={openAbout}
-        class="w-full rounded-lg border border-green-300 bg-white px-4 py-2.5 text-sm font-semibold text-green-800 transition-colors hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-green-200"
+        class="rounded-lg border border-green-300 bg-white px-4 py-2.5 text-sm font-semibold text-green-800 transition-colors hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-green-200"
       >
         About
       </button>
+      <a
+        href="/privacy"
+        class="text-xs font-medium text-green-600 underline decoration-dotted hover:text-green-800"
+      >
+        Privacy policy
+      </a>
     </div>
   </form>
 </div>

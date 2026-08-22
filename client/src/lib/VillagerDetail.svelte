@@ -15,6 +15,7 @@
   import { getProgressState, giftedItems, toggleGifted } from './progress.svelte';
   import ConnectionStatus from './ConnectionStatus.svelte';
   import { route, navigate } from './router';
+  import { createDebouncedQuery } from './search.svelte';
 
   const refdb = getRefDbState();
   const progress = getProgressState();
@@ -37,15 +38,18 @@
   }
 
   // Free-text search replaces the old category pills: matches name, variation
-  // and category, same feel as the villager search page.
-  let giftQuery = $state('');
-  const giftQ = $derived(giftQuery.trim().toLowerCase());
-  // Memoized per-group: only recompute when the query or group items change.
+  // and category, same feel as the villager search page. Same asymmetric
+  // debounce + 2-char minimum as the main list.
+  const giftSearch = createDebouncedQuery(2);
+  const giftQ = $derived(slugify(giftSearch.applied.trim()));
+  /** Precomputed per-item haystacks — built once when the villager loads,
+   //  so keystrokes only run string.includes, never slugify-per-item. */
+  let groupIndex = $state(new Map<string, { idea: GiftIdea; hay: string }[]>());
   function searchItems(group: GiftGroup): GiftIdea[] {
     if (!giftQ) return group.items;
-    // Slugify the query too so multi-word searches ("wooden stool") match the
-    // slugified haystack ("wooden_stool_...").
-    return group.items.filter((i) => slugify(`${i.name} ${i.variation} ${i.category}`).includes(slugify(giftQ)));
+    const idx = groupIndex.get(group.key);
+    if (!idx) return group.items;
+    return idx.filter((e) => e.hay.includes(giftQ)).map((e) => e.idea);
   }
 
   function visibleItems(group: GiftGroup): GiftIdea[] {
@@ -91,7 +95,14 @@
     if (!villager) return;
     const db = refdb.db;
     if (!db) return;
-    groups = giftIdeasByGroup(db, villager);
+    const nextGroups = giftIdeasByGroup(db, villager);
+    groups = nextGroups;
+    groupIndex = new Map(
+      nextGroups.map((g) => [
+        g.key,
+        g.items.map((i) => ({ idea: i, hay: slugify(`${i.name} ${i.variation} ${i.category}`) })),
+      ]),
+    );
     const names = houseItems(villager, 999);
     house = houseItemsDetailed(db, villager.name, names);
     houseImgs = houseImageUrls(db, villager.name, names);
@@ -128,7 +139,7 @@
 </script>
 
 <div class="min-h-screen bg-green-50">
-  <header class="sticky top-0 z-10 flex items-center gap-2 border-b border-green-200 bg-white/95 px-4 py-3 backdrop-blur">
+  <header class="sticky top-0 z-10 flex items-center gap-2 border-b border-green-200 bg-white/95 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur">
     <button
       onclick={goBack}
       class="rounded-lg border border-green-300 bg-white px-3 py-1.5 text-sm text-green-800 hover:bg-green-100"
@@ -203,10 +214,10 @@
           Matched against their favorite colors &amp; styles.
         </p>
         <input
-          bind:value={giftQuery}
+          bind:value={giftSearch.raw}
           type="search"
           placeholder="Search gifts by name…"
-          class="mb-3 w-full rounded-lg border border-green-300 px-3 py-2.5 text-base text-green-900 placeholder-green-400 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200"
+          class="mb-3 w-full rounded-lg border border-green-300 px-3 py-2.5 text-[17px] text-green-900 placeholder-green-400 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200"
         />
         {#if groups.length === 0}
           <p class="text-sm text-green-700">No matches found.</p>

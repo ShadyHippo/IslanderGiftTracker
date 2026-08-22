@@ -4,6 +4,7 @@ import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 interface RefManifestEntry {
   version: number;
   file: string;
+  size: number;
   sha256: string;
 }
 
@@ -76,13 +77,19 @@ async function fetchManifest(): Promise<RefManifest> {
   return (await res.json()) as RefManifest;
 }
 
-async function download(url: string, onProgress: (fraction: number) => void): Promise<ArrayBuffer> {
+async function download(
+  url: string,
+  expectedSize: number,
+  onProgress: (fraction: number) => void,
+): Promise<ArrayBuffer> {
   // no-store: IndexedDB is our cache; never let the browser's HTTP cache serve
   // stale bytes for a URL whose content can change under the same version.
   const res = await fetch(url, { cache: 'no-store' });
   if (!res.ok) throw new Error(`reference db download failed (${res.status})`);
   if (!res.body) return await res.arrayBuffer();
-  const total = Number(res.headers.get('Content-Length')) || 0;
+  // Content-Length may be missing (chunked/proxied responses) — fall back to
+  // the size the manifest advertised so the progress bar still works.
+  const total = Number(res.headers.get('Content-Length')) || expectedSize || 0;
   const reader = res.body.getReader();
   const chunks: Uint8Array[] = [];
   let received = 0;
@@ -160,9 +167,13 @@ export async function loadReferenceDb(): Promise<void> {
     if (cached && cached.version === manifest.latest && cached.sha === entry.sha256) {
       gz = cached.bytes;
     } else {
-      gz = await download(`/db/${entry.file}`, (f) => {
+      gz = await download(`/db/${entry.file}`, entry.size, (f) => {
         state.progress = Math.round(f * 100);
       });
+      // Switch to "preparing" BEFORE hashing/decompressing: these phases can
+      // take seconds on phones and used to show a frozen download percentage,
+      // which read as a stall at ~95%.
+      state.status = 'initializing';
       const sum = await sha256Hex(gz);
       if (sum && sum !== entry.sha256) {
         throw new Error(
@@ -172,7 +183,6 @@ export async function loadReferenceDb(): Promise<void> {
       await idbPut(manifest.latest, sum || entry.sha256, gz);
     }
 
-    state.status = 'initializing';
     const inflated = await gunzip(gz);
     const SQL = await initSql();
     state.db = new SQL.Database(new Uint8Array(inflated));

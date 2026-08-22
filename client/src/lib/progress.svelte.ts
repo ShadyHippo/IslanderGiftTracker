@@ -316,3 +316,26 @@ export function toggleFavorite(name: string) {
 export function toggleOnIsland(name: string) {
   flipFlag(name, 'on_island');
 }
+
+/**
+ * Download the progress db as a file the user owns — a byte-exact copy of
+ * what this app stores (and what the server keeps). Restorable/importable
+ * later; readable by any sqlite tool.
+ */
+export function exportProgressFile(username: string): void {
+  const db = state.db;
+  if (!db) return;
+  const bytes = db.export();
+  const blob = new Blob([bytes as unknown as BlobPart], {
+    type: 'application/x-sqlite3',
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `acnh-gift-log-${username}-${new Date().toISOString().slice(0, 10)}.sqlite`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Give the download a moment to start before freeing the blob.
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}

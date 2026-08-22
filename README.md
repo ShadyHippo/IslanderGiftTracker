@@ -1,5 +1,8 @@
 # Islander Gift Tracker
 
+[![Live app](https://img.shields.io/badge/live-acnh.datahippo.top-2ea44f)](https://acnh.datahippo.top/)
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy_Me_a_Coffee-timvandyke-FFDD00)](https://buymeacoffee.com/timvandyke)
+
 A self-hosted gift tracker for Animal Crossing: New Horizons. A mobile-first
 PWA (installable on iPhone) where you can look up what each villager likes —
 colors, styles, favorite song — and keep a per-person gift log, fully offline,

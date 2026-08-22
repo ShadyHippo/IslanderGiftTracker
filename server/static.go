@@ -28,9 +28,19 @@ func spaHandler(dir string) http.Handler {
 		// SPA fallback: unknown routes serve index.html (unless the path has a file extension).
 		if st, err := os.Stat(path); err != nil || st.IsDir() {
 			if filepath.Ext(r.URL.Path) == "" {
+				w.Header().Set("Cache-Control", "no-cache")
 				http.ServeFile(w, r, filepath.Join(dir, "index.html"))
 				return
 			}
+		}
+		// Vite emits content-hashed filenames under /assets/: safe to cache
+		// forever at browsers and the Cloudflare edge. Everything else here has
+		// a stable filename across deploys (index.html, sw.js, manifest.json,
+		// favicons), so it may be stored but must revalidate every time.
+		if strings.HasPrefix(r.URL.Path, "/assets/") {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		} else {
+			w.Header().Set("Cache-Control", "no-cache")
 		}
 		fs.ServeHTTP(w, r)
 	})

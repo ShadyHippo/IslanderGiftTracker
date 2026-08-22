@@ -12,13 +12,21 @@
   import { logout } from './session.svelte';
   import { openAbout } from './about.svelte';
   import { p } from './router';
+  import { createDebouncedQuery } from './search.svelte';
+  import { getNet } from './net.svelte';
 
   const refdb = getRefDbState();
   const progress = getProgressState();
+  const net = getNet();
+
+  // Asymmetric debounce: typing applies instantly, backspacing settles after
+  // a short idle so the list doesn't regrow on every deleted character.
+  const search = createDebouncedQuery(2);
 
   let villagers: Villager[] = $state([]);
   let images = $state(new Map<string, string>());
-  let query = $state('');
+  /** Precomputed search haystack per villager — built once, not per keystroke. */
+  let searchIndex = $state<{ v: Villager; hay: string }[]>([]);
   let showFavorites = $state(false);
   let showIsland = $state(false);
   let loggingOut = $state(false);
@@ -26,8 +34,15 @@
   $effect(() => {
     const db = refdb.db;
     if (db) {
-      villagers = allVillagers(db);
+      // Build from a LOCAL: reading the `villagers` state here would make
+      // this effect depend on its own write and loop forever.
+      const rows = allVillagers(db);
+      villagers = rows;
       images = villagerImageUrls(db);
+      searchIndex = rows.map((v) => ({
+        v,
+        hay: `${slugify(v.name)} ${slugify(v.species)} ${slugify(v.personality)} ${slugify(v.hobby)}`,
+      }));
     }
   });
 
@@ -40,20 +55,14 @@
 
 
   const filtered = $derived.by(() => {
-    let list = villagers;
-    const q = query.trim().toLowerCase();
-    if (q) {
-      list = list.filter(
-        (v) =>
-          slugify(v.name).includes(q) ||
-          v.species.toLowerCase().includes(q) ||
-          v.personality.toLowerCase().includes(q) ||
-          v.hobby.toLowerCase().includes(q),
-      );
+    let list = searchIndex;
+    if (search.active) {
+      const q = slugify(search.applied.trim());
+      if (q) list = list.filter((e) => e.hay.includes(q));
     }
-    if (showFavorites) list = list.filter((v) => flags.get(v.name)?.favorite);
-    if (showIsland) list = list.filter((v) => flags.get(v.name)?.onIsland);
-    return list;
+    if (showFavorites) list = list.filter((e) => flags.get(e.v.name)?.favorite);
+    if (showIsland) list = list.filter((e) => flags.get(e.v.name)?.onIsland);
+    return list.map((e) => e.v);
   });
 
   function imgFor(name: string): string | null {
@@ -96,7 +105,7 @@
 </script>
 
 <div class="flex min-h-screen flex-col bg-green-50">
-  <header class="sticky top-0 z-10 border-b border-green-200 bg-white/95 px-4 pb-3 pt-4 backdrop-blur">
+  <header class="sticky top-0 z-10 border-b border-green-200 bg-white/95 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur">
     <div class="mb-3 flex items-center justify-between gap-2">
       <div class="flex min-w-0 items-center gap-2">
         <ConnectionStatus />
@@ -104,17 +113,20 @@
       </div>
       <button
         onclick={onLogout}
-        disabled={loggingOut}
+        disabled={loggingOut || (!net.online && progress.dirty)}
+        title={!net.online && progress.dirty
+          ? "You have unsaved changes that haven't synced yet — they'll upload when you're back online."
+          : undefined}
         class="rounded-lg border border-green-300 bg-white px-3 py-1.5 text-sm text-green-800 hover:bg-green-100 disabled:opacity-60"
       >
-        {loggingOut ? 'Signing out…' : 'Sign out'}
+        {loggingOut ? 'Signing out…' : !net.online && progress.dirty ? 'Unsaved…' : 'Sign out'}
       </button>
     </div>
     <input
-      bind:value={query}
+      bind:value={search.raw}
       type="search"
       placeholder="Search by name, species, personality…"
-      class="w-full rounded-lg border border-green-300 px-3 py-2.5 text-base text-green-900 placeholder-green-400 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200"
+      class="w-full rounded-lg border border-green-300 px-3 py-2.5 text-[17px] text-green-900 placeholder-green-400 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200"
     />
     {#if refdb.status === 'ready'}
       <div class="mt-2 flex gap-2">
@@ -135,6 +147,13 @@
             : 'border-green-300 bg-white text-green-700 hover:bg-green-100'}"
         >
           ✓ On my island
+        </button>
+        <button
+          type="button"
+          onclick={openAbout}
+          class="ml-auto self-center rounded-lg border border-green-300 bg-white px-3 py-1.5 text-sm font-semibold text-green-800 transition-colors hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-green-200"
+        >
+          About
         </button>
       </div>
       <p class="mt-2 text-xs text-green-700">
@@ -170,13 +189,16 @@
       </div>
     {:else if refdb.status === 'ready'}
       {#if filtered.length === 0}
-        <p class="py-10 text-center text-green-700">No villagers match “{query}”.</p>
+        <p class="py-10 text-center text-green-700">No villagers match “{search.raw}”.</p>
       {:else}
         <ul class="mx-auto max-w-2xl divide-y divide-green-200 overflow-hidden rounded-xl border border-green-200 bg-white">
           {#each filtered as v (v.name)}
             {@const fav = flags.get(v.name)?.favorite ?? false}
             {@const island = flags.get(v.name)?.onIsland ?? false}
-            <li class="flex items-center gap-2 px-4 py-3 hover:bg-green-50">
+            <!-- content-visibility lets the browser skip off-screen rows, which
+                 takes the edge off regrowing the full list when filters turn
+                 off or characters get deleted -->
+            <li class="flex items-center gap-2 px-4 py-3 [content-visibility:auto] [contain-intrinsic-size:auto_72px] hover:bg-green-50">
               <a
                 href={p('/villager/:name', { params: { name: slugify(v.name) } })}
                 class="flex min-w-0 flex-1 items-center gap-3"
@@ -231,14 +253,4 @@
       {/if}
     {/if}
   </main>
-
-  <div class="px-4 pb-10 text-center">
-    <button
-      type="button"
-      onclick={openAbout}
-      class="rounded-lg border border-green-300 bg-white px-5 py-2 text-sm font-semibold text-green-800 transition-colors hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-green-200"
-    >
-      About
-    </button>
-  </div>
 </div>

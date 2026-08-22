@@ -2,6 +2,7 @@ import {
   login as apiLogin,
   logout as apiLogout,
   me as apiMe,
+  ApiError,
   type SessionUser,
 } from './api';
 
@@ -33,11 +34,18 @@ export function getSession() {
 export async function checkSession(): Promise<void> {
   session.checking = true;
   try {
-    // Hard timeout so the app can never sit on "Loading…" forever (a hung
-    // fetch or a stale service worker would otherwise block the login form).
-    session.user = await withTimeout(apiMe(), 8000);
+    // Short hard timeout: with a cached user the app must render instantly
+    // (offline cold start included), so revalidation may only pause briefly.
+    session.user = await withTimeout(apiMe(), 3000);
     cacheUser(session.user);
-  } catch {
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 401) {
+      // Server explicitly rejected our session cookie: the cached user is
+      // stale — forget it. (Network failures keep the cached user instead.)
+      session.user = null;
+      cacheUser(null);
+      return;
+    }
     // Server unreachable — trust the cached user so the app works offline
     // and across container restarts without forcing re-login.
     session.user = cachedUser();

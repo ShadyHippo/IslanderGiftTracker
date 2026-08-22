@@ -96,11 +96,27 @@ func main() {
 	}
 
 	addr := ":" + cfg.port
-	httpSrv := &http.Server{Addr: addr, Handler: newMux(srv)}
+	httpSrv := &http.Server{Addr: addr, Handler: securityHeaders(newMux(srv), cfg.secureCookies)}
 	log.Printf("acnh server listening on %s (data: %s)", addr, cfg.dataDir)
 	if err := httpSrv.ListenAndServe(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// securityHeaders stamps baseline hardening headers on every response. HSTS
+// rides on SECURE_COOKIES: both only make sense once the site is served over
+// public HTTPS (Cloudflare terminates TLS in front of this process).
+func securityHeaders(next http.Handler, secure bool) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		if secure {
+			h.Set("Strict-Transport-Security", "max-age=31536000")
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // newMux wires all routes; extracted so tests can build the same handler.

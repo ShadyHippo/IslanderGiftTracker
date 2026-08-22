@@ -16,44 +16,6 @@
   const progress = getProgressState();
   const install = getInstallState();
 
-  // Build marker so the user can confirm which deploy is running.
-  const BUILD_HASH: string =
-    typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev';
-  const BUILD_TIME: string =
-    typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : '';
-
-  let clearing = $state(false);
-  async function hardReload(): Promise<void> {
-    if (clearing) return;
-    if (!confirm('Clear offline cache and hard reload?\n\nRe-downloads images on next load. Your gift progress is kept (re-synced from server).')) return;
-    clearing = true;
-    try {
-      if ('caches' in window) {
-        const keys = await caches.keys();
-        await Promise.all(keys.map((k) => caches.delete(k)));
-      }
-      if ('serviceWorker' in navigator) {
-        const regs = await navigator.serviceWorker.getRegistrations();
-        await Promise.all(regs.map((r) => r.unregister()));
-      }
-      // Clear the precache fingerprint so images re-cache on next load
-      try {
-        const idb: IDBDatabase = await new Promise((res, rej) => {
-          const req = indexedDB.open('acnh', 2);
-          req.onsuccess = () => res(req.result);
-          req.onerror = () => rej(req.error);
-        });
-        await new Promise<void>((res) => {
-          const tx = idb.transaction('imgcache', 'readwrite');
-          tx.objectStore('imgcache').clear();
-          tx.oncomplete = () => { idb.close(); res(); };
-          tx.onerror = () => { idb.close(); res(); };
-        });
-      } catch {}
-    } catch {}
-    location.reload();
-  }
-
   onMount(() => {
     void checkSession();
     void checkInstall();
@@ -117,11 +79,13 @@
   });
 </script>
 
-{#if session.checking}
-  <div class="flex min-h-screen items-center justify-center bg-green-50">
-    <p class="text-green-700">Loading…</p>
-  </div>
-{:else if !session.user}
+{#if !session.user}
+  <!--
+    No cached user: show the login form immediately (no network wait).
+    checkSession() revalidates in the background — anyone holding a valid
+    cookie flips into the app as soon as it confirms; offline devices fall
+    back to their cached user instead of ever seeing this.
+  -->
   <Login />
 {:else}
   <Router />
@@ -141,17 +105,6 @@
       </span>
     </div>
   {/if}
-  <div class="fixed bottom-1 left-2 z-50 flex items-center gap-2 text-[10px] leading-none" style="padding-bottom: env(safe-area-inset-bottom, 0px)">
-    <span class="select-text text-green-800/40">{BUILD_HASH}{BUILD_TIME ? ` · ${BUILD_TIME}` : ''}</span>
-    <button
-      onclick={hardReload}
-      disabled={clearing}
-      class="rounded bg-green-800/10 px-2 py-1 text-green-800/60 active:bg-green-800/20 disabled:opacity-50"
-      title="Clear offline cache & hard reload"
-    >
-      {clearing ? 'Clearing…' : '⟳ Clear cache'}
-    </button>
-  </div>
 {/if}
 
 <About />

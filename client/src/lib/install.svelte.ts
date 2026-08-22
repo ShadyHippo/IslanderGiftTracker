@@ -145,12 +145,14 @@ async function ensureRefDbReady(): Promise<void> {
 export async function runInstall(): Promise<void> {
   install.phase = 'installing';
   install.progress = 0;
-  install.detail = 'Downloading app data…';
+  install.detail = 'Preparing app data…';
   install.error = null;
   try {
-    // 1) Reference db (small) — 0..25%
+    // 1) Reference db (usually cached) — 0..10%. The bar used to hard-jump to
+    // 25% here, which read as broken; a real first-run download reports its
+    // own finer-grained progress via the refdb banner instead.
     await ensureRefDbReady();
-    install.progress = 25;
+    install.progress = 10;
 
     // 2) Image bundle — STREAMED. Network chunks feed straight into the
     // unzipper and each image lands in Cache Storage as its bytes arrive, so
@@ -189,6 +191,15 @@ export async function runInstall(): Promise<void> {
               entriesFailed++;
             }
             entriesDone++;
+            // Extraction/saving phase: 80%..97% follows stored-file count so
+            // the bar keeps moving while trailing cache.puts drain (it used
+            // to freeze at ~95% on bytes-done alone).
+            if (entriesFound > 0) {
+              install.progress = Math.min(
+                97,
+                80 + 17 * (entriesDone / entriesFound),
+              );
+            }
           });
         }
       };
@@ -230,9 +241,10 @@ export async function runInstall(): Promise<void> {
           if (value) {
             unzip.push(value);
             received += value.length;
-            if (total > 0) install.progress = 25 + 70 * Math.min(1, received / total);
+            if (total > 0) install.progress = 10 + 70 * Math.min(1, received / total);
           }
         }
+        install.detail = 'Saving images to this device…';
         unzip.push(new Uint8Array(0), true); // end of archive
         break; // downloaded fully
       } catch (e) {

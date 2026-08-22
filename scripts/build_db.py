@@ -547,26 +547,159 @@ def fetch_variant_icon(name, variation):
 
 def _wiki_allimages_filenames(prefix):
     """Return the list of Nookipedia image filenames whose title starts with
-    prefix (cached per-prefix to avoid hammering the API mid-build)."""
+    prefix (cached per-prefix to avoid hammering the API mid-build). The cache
+    read is guarded and writes are atomic: repair/build workers share these
+    files, so a torn read must refetch instead of poisoning the run."""
+    import time
     key = "allimages_" + prefix
     p = os.path.join(CACHE_DIR, key + ".json")
     if os.path.exists(p):
-        with open(p) as f:
-            return json.load(f)
+        try:
+            with open(p) as f:
+                return json.load(f)
+        except Exception:
+            pass  # corrupt/torn entry — fall through and refetch
     q = {"action": "query", "format": "json", "list": "allimages",
          "aiprefix": prefix, "ailimit": "500"}
     url = "https://nookipedia.com/w/api.php?" + urllib.parse.urlencode(q)
+    names = []
+    ok = False
+    for attempt in range(3):
+        try:
+            d = json.loads(http_get(url).decode())
+            names = [i["name"] for i in d.get("query", {}).get("allimages", [])]
+            ok = True
+            break
+        except Exception:
+            if attempt == 2:
+                names = []
+            else:
+                time.sleep(2 * (attempt + 1))
+    if not ok:
+        return names  # never cache failures — an empty list would poison
+                      # every future run of this prefix
     try:
-        d = json.loads(http_get(url).decode())
-        names = [i["name"] for i in d.get("query", {}).get("allimages", [])]
-    except Exception:
-        names = []
-    try:
-        with open(p, "w") as f:
+        with open(p + ".tmp", "w") as f:
             json.dump(names, f)
+        os.replace(p + ".tmp", p)
     except Exception:
         pass
     return names
+
+
+def registry_icon_for(name, variation=''):
+    """Resolve an item icon through the MediaWiki image registry when direct
+    filename guesses fail. Two Nookipedia quirks force this: (1) filenames
+    capitalize differently than titlecase guesses ('Cream_and_Sugar', not
+    'Cream_And_Sugar') and MediaWiki aiprefix matching is case-sensitive after
+    the first character — solved by probing progressively shorter prefixes
+    (full name, then first word alone); (2) wiki icons often carry an extra
+    parenthesized qualifier beyond the xlsx variation ('Baby_Bed_(Blue_-_
+    Plain_White)' for xlsx 'White') — solved by token-containment matching.
+    Candidates are scored so an exact base-name match beats a superset one.
+    Disk-cached; safe to call mid-build. Returns (filename, bytes) or (None,
+    None)."""
+    import re as _re
+    want_v = _re.sub(r'\s+', ' ', variation or '').strip()
+    want_v = _re.sub(r'^NA\s*-\s*', '', want_v).lower()
+    # xlsx colors sports-tank colorways '1.0'..'8.0'; wiki calls them '(3)'.
+    m_ver = _re.fullmatch(r"(\d+)\.0", want_v)
+    if m_ver:
+        want_v = m_ver.group(1)
+    want_tokens = set(_re.findall(r"[a-z0-9]+", want_v)) - {"none"}
+    name_tokens = set(_re.findall(r"[a-z0-9]+", name.lower()))
+
+    def rank(fns):
+        """Score candidate filenames by token containment; prefer variations
+        that START with the wanted one over mere containment. Returns ALL
+        matches best-first — the top pick can still 404 on dodo.ac (wiki
+        redirects like 'Metal-And-Wood' vs the real 'Metal-and-Wood'), so the
+        caller must walk the list."""
+        out = []  # (startswith_first, exact_base, -len(base_part), fn)
+        for fn in dict.fromkeys(fns):
+            if '_NH_' not in fn or '_Storage_' in fn:
+                continue
+            m = _re.search(r'\((.*)\)_NH_', fn)
+            pre_nh = fn.split('_NH_', 1)[0]
+            tail = _re.search(r'\(([^()]*)\)$', pre_nh)
+            base_part = pre_nh[:tail.start()] if tail else pre_nh
+            fn_tokens = set(_re.findall(r"[a-z0-9]+", base_part.lower()))
+            if not (name_tokens <= fn_tokens):
+                continue
+            file_v = _re.sub(r'\s+', ' ', m.group(1)).strip().lower() if m else ''
+            starts = 1
+            if want_tokens:
+                toks = set(_re.findall(r"[a-z0-9]+", file_v))
+                if not want_tokens <= toks:
+                    continue
+                starts = 0 if _re.sub(r'[^a-z0-9]', '', file_v).startswith(
+                    _re.sub(r'[^a-z0-9]', '', want_v)) else 1
+            elif _re.sub(r'[^a-z0-9]', '', want_v) != _re.sub(r'[^a-z0-9]', '', file_v):
+                # Base icon wanted but this file carries a variant qualifier.
+                # Some items ONLY have per-variant files on the wiki ('Circle
+                # Cushion (White)', no bare icon) — keep them as a last resort
+                # rather than reporting the item unfixable.
+                if m is None:
+                    continue
+                starts = 2
+            exact = 0 if _re.sub(r'[^a-z0-9]', '', name.lower()) == \
+                _re.sub(r'[^a-z0-9]', '', base_part.lower()) else 1
+            cand = (starts, exact, -len(base_part), fn)
+            out.append(cand)
+        return [c[3] for c in sorted(out)]
+
+    words = name.split()
+    if not words:
+        return None, None
+    probes = list(dict.fromkeys([
+        titlecase(name).replace(' ', '_'),
+        titlecase_hyphen(name).replace(' ', '_'),
+        titlecase(words[0]).replace(' ', '_'),
+        titlecase_hyphen(words[0]).replace(' ', '_'),
+    ]))
+    fn = None
+    cands = []
+    for base in probes:
+        cands.extend(n.replace(' ', '_')
+                     for n in _wiki_allimages_filenames(base))
+    ranked = rank(cands)
+    if fn is None:
+        # Prefix probing loses when wiki punctuation/casing differs anywhere
+        # after the first char ('Peacoat-and-Skirt Combo', "Tam-o'-Shanter",
+        # 'Bird-of-Paradise'). File-namespace fulltext search doesn't care —
+        # but hyphens read as exclusions and quotes break the query, so strip.
+        try:
+            clean = _re.sub(r"[^\w ]+", " ", name + " " + want_v)
+            clean = _re.sub(r"\s+", " ", clean).strip()
+            q = {"action": "query", "format": "json", "list": "search",
+                 "srsearch": clean,
+                 "srnamespace": "6", "srlimit": "50"}
+            url = "https://nookipedia.com/w/api.php?" + urllib.parse.urlencode(q)
+            d = json.loads(http_get(url).decode())
+            hits = [r["title"].removeprefix("File:").replace(' ', '_')
+                    for r in d.get("query", {}).get("search", [])]
+            if not ranked:
+                ranked = rank(hits)
+            else:
+                # merge: prefix matches outrank search-only hits on ties
+                extra = [f for f in rank(hits) if f not in ranked]
+                ranked = ranked + extra
+        except Exception:
+            pass
+
+    for fn in ranked:
+        data = _cache_bytes(fn)
+        if data is None:
+            try:
+                data = try_fetch(fn)
+            except Exception:
+                data = None
+            if data:
+                with open(os.path.join(CACHE_DIR, fn), "wb") as f:
+                    f.write(data)
+        if data:
+            return fn, maybe_thumb(fn, data)
+    return None, None
 
 
 def build_house_data(db, sheets, no_images, img_dir=None, image_urls=None):
@@ -888,6 +1021,9 @@ def main():
                         data = maybe_thumb(fn, data)
                     if data:
                         return cat, name, var, fn, data
+            _, reg_data = registry_icon_for(name, var)
+            if reg_data:
+                return cat, name, var, None, reg_data
             data = (wiki_allimages(name) or wiki_pageimages(name) or wiki_gallery(name))
             if data:
                 if isinstance(data, str):  # url from pageimages

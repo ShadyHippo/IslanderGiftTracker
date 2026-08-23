@@ -20,8 +20,15 @@ type config struct {
 	port          string
 	dataDir       string
 	staticDir     string
-	initUsers     string // "user1:pass1,user2:pass2"
+	initUsers     string // "user1:pass1,user2:pass2" (password mode)
 	secureCookies bool
+
+	// AUTH_MODE selects the login door: "password" (self-hosted default,
+	// zero-config) or "google" (public instances; OIDC redirect flow).
+	authMode           string
+	googleClientID     string
+	googleClientSecret string
+	googleIssuer       string // overridable so tests can point at a fake IdP
 }
 
 func env(key, def string) string {
@@ -38,6 +45,7 @@ type server struct {
 	refDir     string
 	progDir    string
 	loginLimit *loginLimiter
+	oauth      *oauthClient // non-nil only in google mode
 }
 
 func main() {
@@ -47,11 +55,18 @@ func main() {
 	flag.Parse()
 
 	cfg := config{
-		port:          env("PORT", "8080"),
-		dataDir:       env("DATA_DIR", "./data"),
-		staticDir:     env("STATIC_DIR", "../client/dist"),
-		initUsers:     os.Getenv("ACNH_INIT_USERS"),
-		secureCookies: os.Getenv("SECURE_COOKIES") == "true",
+		port:               env("PORT", "8080"),
+		dataDir:            env("DATA_DIR", "./data"),
+		staticDir:          env("STATIC_DIR", "../client/dist"),
+		initUsers:          os.Getenv("ACNH_INIT_USERS"),
+		secureCookies:      os.Getenv("SECURE_COOKIES") == "true",
+		authMode:           env("AUTH_MODE", "password"),
+		googleClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
+		googleClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
+		googleIssuer:       env("GOOGLE_ISSUER", "https://accounts.google.com"),
+	}
+	if err := cfg.validate(); err != nil {
+		log.Fatalf("config: %v", err)
 	}
 
 	refDir := env("REF_DIR", filepath.Join(cfg.dataDir, "ref"))
@@ -70,7 +85,7 @@ func main() {
 		log.Fatalf("init users schema: %v", err)
 	}
 
-	// Admin password reset: update-or-create the user and exit.
+	// Admin password reset (password mode): update-or-create and exit.
 	if *setUser != "" {
 		if *pass == "" {
 			log.Fatal("-set-password requires -password")
@@ -90,6 +105,9 @@ func main() {
 		progDir:    progDir,
 		loginLimit: newLoginLimiter(loginRateMax(), loginRateWindow()),
 	}
+	if cfg.authMode == "google" {
+		srv.oauth = newOAuthClient(cfg)
+	}
 
 	if err := srv.bootstrapUsers(); err != nil {
 		log.Fatalf("bootstrap users: %v", err)
@@ -100,6 +118,22 @@ func main() {
 	log.Printf("acnh server listening on %s (data: %s)", addr, cfg.dataDir)
 	if err := httpSrv.ListenAndServe(); err != nil {
 		log.Fatal(err)
+	}
+}
+
+// validate enforces mode-specific requirements at boot rather than failing
+// later on the first login attempt.
+func (c config) validate() error {
+	switch c.authMode {
+	case "password":
+		return nil
+	case "google":
+		if c.googleClientID == "" || c.googleClientSecret == "" {
+			return fmt.Errorf("AUTH_MODE=google requires GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET")
+		}
+		return nil
+	default:
+		return fmt.Errorf("AUTH_MODE must be \"password\" or \"google\" (got %q)", c.authMode)
 	}
 }
 
@@ -126,7 +160,14 @@ func newMux(s *server) *http.ServeMux {
 		w.Header().Set("Cache-Control", "no-store")
 		writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
 	})
-	mux.HandleFunc("POST /api/login", s.handleLogin)
+	mux.HandleFunc("GET /api/auth/config", s.handleAuthConfig)
+	if s.cfg.authMode == "google" {
+		mux.HandleFunc("GET /api/auth/google/start", s.handleGoogleStart)
+		mux.HandleFunc("GET /api/auth/google/callback", s.handleGoogleCallback)
+	} else {
+		mux.HandleFunc("POST /api/login", s.handleLogin)
+	}
+	mux.HandleFunc("DELETE /api/account", s.requireAuth(s.handleDeleteAccount))
 	mux.HandleFunc("POST /api/logout", s.requireAuth(s.handleLogout))
 	mux.HandleFunc("GET /api/me", s.requireAuth(s.handleMe))
 	mux.HandleFunc("GET /api/progress", s.requireAuth(s.handleGetProgress))
@@ -163,8 +204,9 @@ func dsn(path string) string {
 }
 
 // bootstrapUsers creates initial users from ACNH_INIT_USERS if the table is empty.
+// Password-mode only: in google mode accounts are born from verified emails.
 func (s *server) bootstrapUsers() error {
-	if s.cfg.initUsers == "" {
+	if s.cfg.initUsers == "" || s.cfg.authMode != "password" {
 		return nil
 	}
 	var n int

@@ -10,6 +10,8 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -42,10 +44,67 @@ func initUsersSchema(db *sql.DB) error {
 	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS users (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		username TEXT UNIQUE NOT NULL,
-		password_hash TEXT NOT NULL,
+		password_hash TEXT,
+		google_sub TEXT UNIQUE,
+		email TEXT UNIQUE,
 		created_at TEXT NOT NULL
 	)`)
-	return err
+	if err != nil {
+		return err
+	}
+	return migrateUsersSchema(db)
+}
+
+// migrateUsersSchema upgrades pre-google-mode databases (whose password_hash
+// was NOT NULL and which lacked google_sub/email) by rebuilding the table.
+// One-time; detected via the presence of the google_sub column.
+func migrateUsersSchema(db *sql.DB) error {
+	hasGoogleSub := false
+	rows, err := db.Query("PRAGMA table_info(users)")
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var cid, notnull, pk int
+		var name, ctype string
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			rows.Close()
+			return err
+		}
+		if name == "google_sub" {
+			hasGoogleSub = true
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if hasGoogleSub {
+		return nil
+	}
+	stmts := []string{
+		`DROP TABLE IF EXISTS users_old`,
+		`ALTER TABLE users RENAME TO users_old`,
+		`CREATE TABLE users (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			username TEXT UNIQUE NOT NULL,
+			password_hash TEXT,
+			google_sub TEXT UNIQUE,
+			email TEXT UNIQUE,
+			created_at TEXT NOT NULL
+		)`,
+		`INSERT INTO users (id, username, password_hash, created_at)
+			SELECT id, username, password_hash, created_at FROM users_old`,
+		`DROP TABLE users_old`,
+	}
+	for _, q := range stmts {
+		if _, err := db.Exec(q); err != nil {
+			return fmt.Errorf("users schema migration: %w", err)
+		}
+	}
+	log.Printf("users table migrated for google auth (existing passwords preserved)")
+	return nil
 }
 
 func createUser(db *sql.DB, username, password string) error {
@@ -294,6 +353,41 @@ func (s *server) handleLogout(w http.ResponseWriter, r *http.Request) {
 		s.sessions.remove(c.Value)
 	}
 	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: "", Path: "/", MaxAge: -1})
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// handleDeleteAccount removes the caller's account entirely: session, progress
+// file, versioned backups, user row. Self-serve in both auth modes.
+func (s *server) handleDeleteAccount(w http.ResponseWriter, r *http.Request) {
+	username := usernameFrom(r.Context())
+	if username == "" {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "not logged in"})
+		return
+	}
+	if c, err := r.Cookie(sessionCookie); err == nil {
+		s.sessions.remove(c.Value)
+	}
+	// Progress data first: if the user row delete fails we'd rather have an
+	// orphan row than orphaned personal files.
+	if err := os.Remove(s.progressPath(username)); err != nil && !os.IsNotExist(err) {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not delete progress data"})
+		return
+	}
+	backups, _ := filepath.Glob(filepath.Join(s.backupDir(), username+"-*.db"))
+	for _, b := range backups {
+		os.Remove(b)
+	}
+	res, err := s.usersDB.Exec("DELETE FROM users WHERE username = ?", username)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not delete account"})
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such account"})
+		return
+	}
+	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: "", Path: "/", MaxAge: -1})
+	log.Printf("account deleted user=%q ip=%s", username, clientIP(r))
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 

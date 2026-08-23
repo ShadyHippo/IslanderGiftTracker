@@ -21,6 +21,12 @@ services:
       REF_DIR: /app/ref
       STATIC_DIR: /app/client/dist
       SECURE_COOKIES: "true"
+      # --- Login mode -----------------------------------------------------
+      # Default (below): username/password accounts, self-hosted friendly.
+      # For a public Google-only instance see README "Public instance":
+      # AUTH_MODE: "google"
+      # GOOGLE_CLIENT_ID: "xxxx.apps.googleusercontent.com"
+      # GOOGLE_CLIENT_SECRET: "GOCSPX-..."
       # Comma-separated user:password, applied ONLY on first start (empty users table).
       # Or use: docker compose run --rm acnh -set-password <user> -password <pass>
       ACNH_INIT_USERS: "testuser:CHANGE_ME"

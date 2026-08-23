@@ -19,7 +19,7 @@
     <section class="rounded-xl border border-green-200 bg-white p-5">
       <h2 class="mb-2 font-semibold text-green-900">What we store</h2>
       <ul class="list-disc space-y-1 pl-5 text-sm leading-relaxed text-green-700">
-        <li>Your <strong>account name</strong> and a password hash (passwords are never stored in readable form).</li>
+        <li>Your <strong>account</strong>: a name plus either a password hash (never stored in readable form) or your Google account identity — an opaque ID and your email address, depending on how this instance is set up.</li>
         <li>Your <strong>gift log and villager flags</strong> (favorites, on-island) — this is the data you create.</li>
         <li>Recent backups of that data on the server, so mistakes can be undone.</li>
       </ul>
@@ -48,15 +48,17 @@
       <h2 class="mb-2 font-semibold text-green-900">Deleting your data</h2>
       <p class="text-sm leading-relaxed text-green-700">
         You can download a copy of your gift log anytime from
-        <strong>About → Download my data</strong>. To delete your account and
-        everything stored on the server, open an issue at
+        <strong>About → Download my data</strong>. To delete everything —
+        account, gift log, and all server backups — use
+        <strong>About → Delete my account</strong>; it takes effect immediately
+        and needs no one's approval. If something goes wrong,
         <a
           href="https://github.com/ShadyHippo/IslanderGiftTracker/issues"
           target="_blank"
           rel="noopener noreferrer"
           class="font-medium text-green-700 underline decoration-dotted hover:text-green-900"
         >the project's issue tracker</a>
-        from your account name and it will be removed promptly.
+        is there as a fallback.
       </p>
     </section>
 

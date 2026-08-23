@@ -44,6 +44,21 @@ export function me(): Promise<SessionUser> {
   return request<SessionUser>('/api/me');
 }
 
+export interface AuthConfig {
+  mode: 'password' | 'google';
+  clientId?: string;
+}
+
+/** Which login door the server exposes; decides what Login.svelte renders. */
+export function authConfig(): Promise<AuthConfig> {
+  return request<AuthConfig>('/api/auth/config');
+}
+
+/** Permanently removes the account: progress, backups, user row, session. */
+export function deleteAccount(): Promise<{ ok: boolean }> {
+  return request<{ ok: boolean }>('/api/account', { method: 'DELETE' });
+}
+
 export function logout(): Promise<{ ok: boolean }> {
   return request<{ ok: boolean }>('/api/logout', { method: 'POST' });
 }

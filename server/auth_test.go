@@ -9,32 +9,32 @@ import (
 
 func TestCreateAndVerifyUser(t *testing.T) {
 	db := tempUsersDB(t)
-	if err := createUser(db, "wife", "s3cret"); err != nil {
+	if err := createUser(db, "testuser", "testpass"); err != nil {
 		t.Fatalf("createUser: %v", err)
 	}
-	if _, ok, err := verifyUser(db, "wife", "s3cret"); err != nil || !ok {
+	if _, ok, err := verifyUser(db, "testuser", "testpass"); err != nil || !ok {
 		t.Fatalf("verify correct password: ok=%v err=%v", ok, err)
 	}
-	if _, ok, err := verifyUser(db, "wife", "wrong"); err != nil || ok {
+	if _, ok, err := verifyUser(db, "testuser", "badpass"); err != nil || ok {
 		t.Fatalf("verify wrong password: ok=%v err=%v (want false, nil)", ok, err)
 	}
-	if _, ok, err := verifyUser(db, "nobody", "s3cret"); err != nil || ok {
+	if _, ok, err := verifyUser(db, "nobody", "testpass"); err != nil || ok {
 		t.Fatalf("verify missing user: ok=%v err=%v (want false, nil)", ok, err)
 	}
 }
 
 func TestUpsertUser(t *testing.T) {
 	db := tempUsersDB(t)
-	if err := upsertUser(db, "wife", "first"); err != nil {
+	if err := upsertUser(db, "testuser", "firstpass"); err != nil {
 		t.Fatalf("upsert create: %v", err)
 	}
-	if err := upsertUser(db, "wife", "second"); err != nil {
+	if err := upsertUser(db, "testuser", "secondpass"); err != nil {
 		t.Fatalf("upsert update: %v", err)
 	}
-	if _, ok, _ := verifyUser(db, "wife", "second"); !ok {
+	if _, ok, _ := verifyUser(db, "testuser", "secondpass"); !ok {
 		t.Fatal("expected updated password to verify")
 	}
-	if _, ok, _ := verifyUser(db, "wife", "first"); ok {
+	if _, ok, _ := verifyUser(db, "testuser", "firstpass"); ok {
 		t.Fatal("old password should no longer verify")
 	}
 }
@@ -42,33 +42,33 @@ func TestUpsertUser(t *testing.T) {
 func TestPasswordTooLong(t *testing.T) {
 	db := tempUsersDB(t)
 	long := strings.Repeat("x", 80)
-	if err := createUser(db, "wife", long); err == nil {
+	if err := createUser(db, "testuser", long); err == nil {
 		t.Fatal("createUser should reject >64-byte password")
 	}
-	if err := upsertUser(db, "wife", long); err == nil {
+	if err := upsertUser(db, "testuser", long); err == nil {
 		t.Fatal("upsertUser should reject >64-byte password")
 	}
-	if err := createUser(db, "wife", ""); err == nil {
+	if err := createUser(db, "testuser", ""); err == nil {
 		t.Fatal("createUser should reject empty password")
 	}
 	// A 64-byte password is the limit and must still work.
 	exact := strings.Repeat("y", maxPasswordLen)
-	if err := createUser(db, "wife", exact); err != nil {
+	if err := createUser(db, "testuser", exact); err != nil {
 		t.Fatalf("64-byte password should be accepted: %v", err)
 	}
-	if _, ok, err := verifyUser(db, "wife", exact); err != nil || !ok {
+	if _, ok, err := verifyUser(db, "testuser", exact); err != nil || !ok {
 		t.Fatalf("64-byte password should verify: ok=%v err=%v", ok, err)
 	}
 }
 
 func TestVerifyMissingUserIsMismatch(t *testing.T) {
 	db := tempUsersDB(t)
-	if err := createUser(db, "wife", "s3cret"); err != nil {
+	if err := createUser(db, "testuser", "testpass"); err != nil {
 		t.Fatal(err)
 	}
 	// Same result shape as a wrong password for an existing user:
 	// false, nil — never an error, never ok.
-	_, ok, err := verifyUser(db, "nobody", "s3cret")
+	_, ok, err := verifyUser(db, "nobody", "testpass")
 	if ok || err != nil {
 		t.Fatalf("missing user: ok=%v err=%v (want false, nil)", ok, err)
 	}
@@ -80,20 +80,20 @@ func TestVerifyMissingUserIsMismatch(t *testing.T) {
 
 func TestVerifyUserCaseInsensitive(t *testing.T) {
 	db := tempUsersDB(t)
-	if err := createUser(db, "wife", "s3cret"); err != nil {
+	if err := createUser(db, "testuser", "testpass"); err != nil {
 		t.Fatal(err)
 	}
-	canonical, ok, err := verifyUser(db, "WIFE", "s3cret")
-	if err != nil || !ok || canonical != "wife" {
-		t.Fatalf("WIFE should verify as wife: canonical=%q ok=%v err=%v", canonical, ok, err)
+	canonical, ok, err := verifyUser(db, "TESTUSER", "testpass")
+	if err != nil || !ok || canonical != "testuser" {
+		t.Fatalf("TESTUSER should verify as testuser: canonical=%q ok=%v err=%v", canonical, ok, err)
 	}
-	canonical, ok, err = verifyUser(db, "Wife", "s3cret")
-	if err != nil || !ok || canonical != "wife" {
-		t.Fatalf("Wife should verify as wife: canonical=%q ok=%v err=%v", canonical, ok, err)
+	canonical, ok, err = verifyUser(db, "Testuser", "testpass")
+	if err != nil || !ok || canonical != "testuser" {
+		t.Fatalf("Testuser should verify as testuser: canonical=%q ok=%v err=%v", canonical, ok, err)
 	}
 	// Creation normalizes to lowercase: no separate 'WIFE' user can be created.
-	if err := createUser(db, "WIFE", "other"); err == nil {
-		t.Fatal("createUser('WIFE') should fail (duplicate of wife)")
+	if err := createUser(db, "TESTUSER", "other"); err == nil {
+		t.Fatal("createUser('TESTUSER') should fail (duplicate of testuser)")
 	}
 }
 
@@ -102,11 +102,11 @@ func TestSessionStoreLifecycle(t *testing.T) {
 	s := newSessionStore()
 	s.now = func() time.Time { return now }
 
-	tok, err := s.create("wife")
+	tok, err := s.create("testuser")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if u, ok := s.get(tok); !ok || u != "wife" {
+	if u, ok := s.get(tok); !ok || u != "testuser" {
 		t.Fatalf("get after create: u=%q ok=%v", u, ok)
 	}
 	// Not expired yet.

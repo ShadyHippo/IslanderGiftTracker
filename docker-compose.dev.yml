@@ -6,7 +6,7 @@
 #   make app-logs         # follow logs
 #   make app-down         # stop
 #
-# Test login (first boot only): wife / devpass  (ACNH_INIT_USERS below)
+# Test login (first boot only): testuser / testpass  (ACNH_INIT_USERS below)
 
 services:
   acnh:
@@ -25,7 +25,7 @@ services:
       PORT: "8080"
       DATA_DIR: /data
       STATIC_DIR: /client-dist
-      ACNH_INIT_USERS: "wife:devpass,hippo:devpass"
+      ACNH_INIT_USERS: "testuser:testpass"
     volumes:
       # user data + progress db (persists across app-up/down)
       - ./dev-data:/data

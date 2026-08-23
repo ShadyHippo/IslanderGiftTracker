@@ -18,7 +18,7 @@ func newTestServer(t *testing.T, staticDir string) *httptest.Server {
 	t.Helper()
 	dataDir := t.TempDir()
 	db := tempUsersDB(t)
-	if err := createUser(db, "wife", "s3cret"); err != nil {
+	if err := createUser(db, "testuser", "testpass"); err != nil {
 		t.Fatal(err)
 	}
 	srv := &server{
@@ -77,12 +77,12 @@ func login(t *testing.T, ts *httptest.Server, user, pass string) (*http.Response
 func TestAuthFlow(t *testing.T) {
 	ts := newTestServer(t, filepath.Join(t.TempDir(), "nonexistent"))
 
-	resp, _ := login(t, ts, "wife", "wrong")
+	resp, _ := login(t, ts, "testuser", "wrong")
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("wrong password: status = %d, want 401", resp.StatusCode)
 	}
 
-	resp, cookies := login(t, ts, "wife", "s3cret")
+	resp, cookies := login(t, ts, "testuser", "testpass")
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("login: status = %d, want 200", resp.StatusCode)
 	}
@@ -95,7 +95,7 @@ func TestAuthFlow(t *testing.T) {
 	me, _ := ts.Client().Do(req)
 	body, _ := io.ReadAll(me.Body)
 	me.Body.Close()
-	if !strings.Contains(string(body), `"wife"`) {
+	if !strings.Contains(string(body), `"testuser"`) {
 		t.Fatalf("me: body = %s", body)
 	}
 
@@ -115,7 +115,7 @@ func TestAuthFlow(t *testing.T) {
 
 func TestLoginPasswordTooLong(t *testing.T) {
 	ts := newTestServer(t, filepath.Join(t.TempDir(), "nonexistent"))
-	body := bytes.NewBufferString(`{"username":"wife","password":"` + strings.Repeat("x", 80) + `"}`)
+	body := bytes.NewBufferString(`{"username":"testuser","password":"` + strings.Repeat("x", 80) + `"}`)
 	req, _ := http.NewRequest("POST", ts.URL+"/api/login", body)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := ts.Client().Do(req)
@@ -131,7 +131,7 @@ func TestLoginPasswordTooLong(t *testing.T) {
 
 func TestProgressFlow(t *testing.T) {
 	ts := newTestServer(t, filepath.Join(t.TempDir(), "nonexistent"))
-	_, cookies := login(t, ts, "wife", "s3cret")
+	_, cookies := login(t, ts, "testuser", "testpass")
 	jar := cookies[0]
 
 	get := func() *http.Response {
@@ -204,7 +204,7 @@ func TestLoginRateLimit(t *testing.T) {
 	_ = ts
 	dataDir := t.TempDir()
 	db := tempUsersDB(t)
-	createUser(db, "wife", "s3cret")
+	createUser(db, "testuser", "testpass")
 	srv := &server{
 		cfg:        config{staticDir: filepath.Join(t.TempDir(), "no"), dataDir: dataDir},
 		usersDB:    db,
@@ -220,7 +220,7 @@ func TestLoginRateLimit(t *testing.T) {
 
 	statuses := []int{}
 	for i := 0; i < 3; i++ {
-		resp, _ := login(t, ts2, "wife", "wrong")
+		resp, _ := login(t, ts2, "testuser", "wrong")
 		statuses = append(statuses, resp.StatusCode)
 	}
 	if statuses[0] != 401 || statuses[1] != 401 {

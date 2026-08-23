@@ -16,7 +16,7 @@ trap cleanup EXIT
 echo "building server..."
 (cd server && go build -o "$DATA/server" .)
 
-ACNH_INIT_USERS="wife:test123" DATA_DIR="$DATA/data" PORT=$PORT "$DATA/server" > "$DATA/server.log" 2>&1 &
+ACNH_INIT_USERS="testuser:testpass" DATA_DIR="$DATA/data" PORT=$PORT "$DATA/server" > "$DATA/server.log" 2>&1 &
 SRV_PID=$!
 sleep 1.2
 
@@ -30,8 +30,8 @@ login() { curl -s -b "$JAR" -c "$JAR" -o /dev/null -w '%{http_code}' -X POST "$B
 
 check "GET / (static)"              200 "$(curl -s -o /dev/null -w '%{http_code}' $B/)"
 check "GET /api/me (no auth)"       401 "$(curl -s -o /dev/null -w '%{http_code}' $B/api/me)"
-check "login wrong password"        401 "$(login wife nope)"
-check "login correct"               200 "$(login wife test123)"
+check "login wrong password"        401 "$(login testuser badpass)"
+check "login correct"               200 "$(login testuser testpass)"
 check "GET /api/me (authed)"        200 "$(curl -s -b "$JAR" -o /dev/null -w '%{http_code}' $B/api/me)"
 check "GET /api/progress (authed)"  200 "$(curl -s -b "$JAR" -o /dev/null -w '%{http_code}' $B/api/progress)"
 

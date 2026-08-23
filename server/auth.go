@@ -108,7 +108,7 @@ func validatePassword(password string) error {
 
 // verifyUser checks credentials case-insensitively and returns the canonical
 // (stored) username on success, so sessions and progress files always use the
-// same spelling ("Wife" and "wife" are the same user).
+// same spelling ("Mabel" and "mabel" are the same user).
 func verifyUser(db *sql.DB, username, password string) (string, bool, error) {
 	var stored string
 	var hash string

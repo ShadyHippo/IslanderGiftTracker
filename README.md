@@ -92,3 +92,14 @@ server/deploy/                Dockerfile, docker-compose
 client/                       Svelte 5 + TS + Vite + Tailwind + sql.js
 Makefile                      build/run shortcuts
 ```
+
+## Fan project
+
+This is a non-commercial fan project. Animal Crossing: New Horizons and all
+related assets are © Nintendo. This app is not affiliated with or endorsed by
+Nintendo. Game data and images are fetched from community sources (Nookipedia)
+at build time; nothing is redistributed in this repository.
+
+## License
+
+[MIT](LICENSE) © 2026 ShadyHippo

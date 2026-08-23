@@ -23,6 +23,6 @@ services:
       SECURE_COOKIES: "true"
       # Comma-separated user:password, applied ONLY on first start (empty users table).
       # Or use: docker compose run --rm acnh -set-password <user> -password <pass>
-      ACNH_INIT_USERS: "wife:CHANGE_ME,hippo:CHANGE_ME"
+      ACNH_INIT_USERS: "testuser:CHANGE_ME"
     volumes:
       - ./data:/data

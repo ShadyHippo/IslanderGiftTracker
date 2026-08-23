@@ -63,7 +63,7 @@ func TestQuickCheck(t *testing.T) {
 
 func TestEnsureProgressDB(t *testing.T) {
 	s := &server{progDir: t.TempDir()}
-	path := s.progressPath("wife")
+	path := s.progressPath("testuser")
 	if err := s.ensureProgressDB(path); err != nil {
 		t.Fatalf("ensure: %v", err)
 	}
@@ -92,18 +92,18 @@ func TestPruneBackups(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i := 0; i < maxBackups+10; i++ {
-		name := filepath.Join(backupDir, fmt.Sprintf("wife-20260101-%06d.db", i))
+		name := filepath.Join(backupDir, fmt.Sprintf("testuser-20260101-%06d.db", i))
 		if err := os.WriteFile(name, []byte("x"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
-	s.pruneBackups("wife")
-	matches, _ := filepath.Glob(filepath.Join(backupDir, "wife-*.db"))
+	s.pruneBackups("testuser")
+	matches, _ := filepath.Glob(filepath.Join(backupDir, "testuser-*.db"))
 	if len(matches) != maxBackups {
 		t.Fatalf("expected %d backups kept, got %d", maxBackups, len(matches))
 	}
 	sort.Strings(matches)
-	if filepath.Base(matches[0]) != "wife-20260101-000010.db" {
+	if filepath.Base(matches[0]) != "testuser-20260101-000010.db" {
 		t.Fatalf("oldest backups should have been pruned first, first kept = %q", filepath.Base(matches[0]))
 	}
 }

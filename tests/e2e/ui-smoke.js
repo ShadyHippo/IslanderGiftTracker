@@ -1,10 +1,10 @@
 // UI smoke test — runs INSIDE mcr.microsoft.com/playwright:v1.62.1-noble.
-// Usage: E2E_URL=http://localhost:8080 E2E_USER=wife E2E_PASS=devpass node ui-smoke.js
+// Usage: E2E_URL=http://localhost:8080 E2E_USER=testuser E2E_PASS=testpass node ui-smoke.js
 import { chromium } from 'playwright';
 
 const base = process.env.E2E_URL || 'http://localhost:8080';
-const user = process.env.E2E_USER || 'wife';
-const pass = process.env.E2E_PASS || 'devpass';
+const user = process.env.E2E_USER || 'testuser';
+const pass = process.env.E2E_PASS || 'testpass';
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 390, height: 844 } }); // iPhone-ish
 

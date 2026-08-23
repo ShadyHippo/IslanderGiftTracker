@@ -36,3 +36,7 @@ cont_maki.sh
 images/
 reference.db.tmp
 reference.v*.db.gz.tmp
+
+# --- Committed build/test artifacts (regenerated locally) ---
+server/acnh
+tests/e2e/*.png

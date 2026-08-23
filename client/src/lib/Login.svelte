@@ -108,12 +108,20 @@
       >
         About
       </button>
-      <a
-        href="/privacy"
-        class="text-xs font-medium text-green-600 underline decoration-dotted hover:text-green-800"
-      >
-        Privacy policy
-      </a>
+      <div class="flex items-center gap-3">
+        <a
+          href="/privacy"
+          class="text-xs font-medium text-green-600 underline decoration-dotted hover:text-green-800"
+        >
+          Privacy
+        </a>
+        <a
+          href="/tos"
+          class="text-xs font-medium text-green-600 underline decoration-dotted hover:text-green-800"
+        >
+          Terms
+        </a>
+      </div>
     </div>
   </form>
 </div>

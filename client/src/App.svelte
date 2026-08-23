@@ -9,7 +9,13 @@
   import Login from './lib/Login.svelte';
   import About from './lib/About.svelte';
   import SaveBadges from './lib/SaveBadges.svelte';
-  import './lib/router';
+  import { route } from './lib/router';
+
+  // Pages that must render WITHOUT a login (Google's OAuth branding requires
+  // publicly reachable privacy policy + terms): direct links and logged-out
+  // visitors get the real page, never the login wall.
+  const PUBLIC_PATHS = new Set(['/privacy', '/tos']);
+  const isPublicPage = $derived(PUBLIC_PATHS.has(route.pathname));
 
   const session = getSession();
   const refdb = getRefDbState();
@@ -19,7 +25,8 @@
   onMount(() => {
     void checkSession();
     void checkInstall();
-    maybeAutoOpenAbout();
+    // The first-visit About modal must never cover a public legal page.
+    if (!isPublicPage) maybeAutoOpenAbout();
   });
 
   // The reference db is app-level state: load it as soon as we're logged in,
@@ -79,7 +86,7 @@
   });
 </script>
 
-{#if !session.user}
+{#if !session.user && !isPublicPage}
   <!--
     No cached user: show the login form immediately (no network wait).
     checkSession() revalidates in the background — anyone holding a valid
@@ -90,20 +97,22 @@
 {:else}
   <Router />
 
+  {#if session.user}
     {#if progress.status === 'ready'}
-    <SaveBadges />
-  {/if}
-  {#if refdb.status === 'downloading' || refdb.status === 'initializing'}
-    <div class="fixed inset-x-0 top-0 z-50 flex flex-col items-center gap-1 bg-amber-100/95 px-4 py-2 text-center text-sm font-medium text-amber-900 shadow backdrop-blur" style="padding-top: env(safe-area-inset-top, 12px)">
-      <span class="flex items-center gap-2">
-        <span class="h-3 w-3 animate-spin rounded-full border-2 border-amber-900/30 border-t-amber-900"></span>
-        {#if refdb.status === 'downloading'}
-          Downloading data… {refdb.progress}%
-        {:else}
-          Preparing data…
-        {/if}
-      </span>
-    </div>
+      <SaveBadges />
+    {/if}
+    {#if refdb.status === 'downloading' || refdb.status === 'initializing'}
+      <div class="fixed inset-x-0 top-0 z-50 flex flex-col items-center gap-1 bg-amber-100/95 px-4 py-2 text-center text-sm font-medium text-amber-900 shadow backdrop-blur" style="padding-top: env(safe-area-inset-top, 12px)">
+        <span class="flex items-center gap-2">
+          <span class="h-3 w-3 animate-spin rounded-full border-2 border-amber-900/30 border-t-amber-900"></span>
+          {#if refdb.status === 'downloading'}
+            Downloading data… {refdb.progress}%
+          {:else}
+            Preparing data…
+          {/if}
+        </span>
+      </div>
+    {/if}
   {/if}
 {/if}
 

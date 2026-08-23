@@ -163,13 +163,22 @@
         >
           Source code ↗
         </a>
-        <button
-          type="button"
-          onclick={openPrivacy}
-          class="font-medium text-green-700 underline decoration-dotted hover:text-green-900"
-        >
-          Privacy policy
-        </button>
+        <div class="flex items-center gap-3">
+          <button
+            type="button"
+            onclick={openPrivacy}
+            class="font-medium text-green-700 underline decoration-dotted hover:text-green-900"
+          >
+            Privacy policy
+          </button>
+          <button
+            type="button"
+            onclick={() => { dismissAbout(); void navigate('/tos'); }}
+            class="font-medium text-green-700 underline decoration-dotted hover:text-green-900"
+          >
+            Terms
+          </button>
+        </div>
       </div>
 
       <p class="mb-3 select-text text-center text-[10px] leading-none text-green-800/40">

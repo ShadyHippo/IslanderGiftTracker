@@ -70,5 +70,13 @@
         endorsed by Nintendo.
       </p>
     </section>
+
+    <p class="text-center text-sm text-green-700">
+      Also read the
+      <a
+        href="/tos"
+        class="font-medium text-green-700 underline decoration-dotted hover:text-green-900"
+      >Terms of Service</a>.
+    </p>
   </main>
 </div>

@@ -31,6 +31,13 @@ export function getSession() {
   return session;
 }
 
+/** Drop the locally cached identity without touching the server (used after
+ *  successful account deletion — the server already destroyed the session). */
+export function clearLocalSession(): void {
+  session.user = null;
+  cacheUser(null);
+}
+
 export async function checkSession(): Promise<void> {
   session.checking = true;
   try {

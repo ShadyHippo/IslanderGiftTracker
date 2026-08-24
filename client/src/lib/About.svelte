@@ -1,7 +1,8 @@
 <script lang="ts">
   import { getAbout, dismissAbout } from './about.svelte';
   import { getProgressState, exportProgressFile } from './progress.svelte';
-  import { getSession } from './session.svelte';
+  import { getSession, clearLocalSession } from './session.svelte';
+  import { deleteAccount } from './api';
   import { detectPlatform, isStandalone, installHint } from './platform.svelte';
   import { navigate } from './router';
 
@@ -50,6 +51,27 @@
   function openPrivacy() {
     dismissAbout();
     void navigate('/privacy');
+  }
+
+  let deleting = $state(false);
+  async function onDeleteAccount() {
+    if (deleting) return;
+    const msg =
+      'Delete your account PERMANENTLY?\n\n' +
+      'This wipes your gift log and all server backups of it. ' +
+      'Download your data first if you want to keep a copy.';
+    if (!confirm(msg)) return;
+    if (!confirm('Last chance — this cannot be undone. Delete?')) return;
+    deleting = true;
+    try {
+      await deleteAccount();
+      clearLocalSession();
+      // Full navigation so every in-memory store resets cleanly.
+      window.location.assign('/');
+    } catch {
+      alert('Could not delete the account right now — try again later.');
+      deleting = false;
+    }
   }
 
   function onKeydown(e: KeyboardEvent) {
@@ -110,6 +132,19 @@
           <p class="mt-1 text-center text-[11px] text-green-600">
             A byte-exact copy of your gift log that you own and keep.
           </p>
+        {/if}
+        {#if session.user}
+          <div class="mt-4 rounded-lg border border-red-200 bg-red-50 p-3">
+            <p class="text-xs font-semibold text-red-800">Danger zone</p>
+            <button
+              type="button"
+              onclick={onDeleteAccount}
+              disabled={deleting}
+              class="mt-2 w-full rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 disabled:opacity-60"
+            >
+              {deleting ? 'Deleting…' : 'Delete my account'}
+            </button>
+          </div>
         {/if}
       </section>
 

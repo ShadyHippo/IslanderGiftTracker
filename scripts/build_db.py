@@ -985,11 +985,26 @@ def main():
 
         def one(task):
             cat, name, var = task
+            # Spreadsheet placeholders ('NA'/'None') are not wiki variation
+            # qualifiers: looking them up as one makes registry ranking reject
+            # bare base icons (wanted-token 'na' matches nothing). Lookups use
+            # the normalized value; the saved stem/url keeps the original.
+            lookup_var = ('' if var and var.strip().upper() in ('NA', 'NONE', 'NULL')
+                          else var)
+            # Past runs stashed last-resort bytes under wiki_* names in
+            # IMAGES_RAW but never read them back — consult that stash first.
+            for lv in dict.fromkeys([var, lookup_var]):
+                sfn = f"wiki_{name}_{lv}".replace(' ', '_') + '.png'
+                sdata = get_cache_bytes(sfn)
+                if sdata:
+                    sdata = maybe_thumb(sfn, sdata)
+                    if sdata:
+                        return cat, name, var, sfn, sdata
             bases = [titlecase(name).replace(' ', '_'),
                      titlecase_hyphen(name).replace(' ', '_')]
             pats = PATTERNS.get(cat, PATTERNS["default"])
             vpats = (["{n}_({v})_NH_Icon.png", "{n}_({v})_NH_Texture.png", "{n}_({v})_NH.png"]
-                     if var else [])
+                     if lookup_var else [])
 
             def get_or_fetch(fn):
                 """Return cached bytes for fn, or fetch+cache from dodo.ac."""
@@ -1004,7 +1019,7 @@ def main():
             # Exact variation icons FIRST (e.g. Soft-Serve_Lamp_(Strawberry_Swirl))
             # — the base icon exists for most items and must not shadow them.
             if vpats:
-                v = titlecase(var).replace(' ', '_')
+                v = titlecase(lookup_var).replace(' ', '_')
                 for base in dict.fromkeys(bases):
                     for pat in vpats:
                         fn = pat.format(n=base, v=v)
@@ -1021,7 +1036,7 @@ def main():
                         data = maybe_thumb(fn, data)
                     if data:
                         return cat, name, var, fn, data
-            _, reg_data = registry_icon_for(name, var)
+            _, reg_data = registry_icon_for(name, lookup_var)
             if reg_data:
                 return cat, name, var, None, reg_data
             data = (wiki_allimages(name) or wiki_pageimages(name) or wiki_gallery(name))
@@ -1039,24 +1054,36 @@ def main():
                 return cat, name, var, wfn, data
             return cat, name, var, None, None
 
+        results = {}
         with ThreadPoolExecutor(max_workers=16) as pool:
-            for cat, name, var, fn, data in pool.map(one, tasks):
-                stats[cat][1] += 1
-                if data:
-                    stats[cat][0] += 1
-                    if img_dir:
-                        stem = sanitize_filename(name) + (f'_{sanitize_filename(var)}' if var else '')
-                        url = save_image(img_dir, cat, stem, data, image_urls)
-                        db.execute("INSERT OR REPLACE INTO images VALUES (?,?,?,?)",
-                                   (cat, name, var, url))
-                    else:
-                        db.execute("INSERT OR REPLACE INTO images VALUES (?,?,?,?,?)",
-                                   (cat, name, var, sqlite3.Binary(data), fn))
+            for task, result in zip(tasks, pool.map(one, tasks)):
+                results[task] = result
+        # CDN throttling under 16-way parallel load fails a different slice of
+        # lookups every run (the run-to-run miss wobble); one quiet sequential
+        # retry pass makes the miss set deterministic instead of luck.
+        retry = [t for t in tasks if not results[t][4]]
+        if retry:
+            print(f"    retrying {len(retry)} missed lookups sequentially...")
+            for t in retry:
+                results[t] = one(t)
+        for task in tasks:
+            cat, name, var, fn, data = results[task]
+            stats[cat][1] += 1
+            if data:
+                stats[cat][0] += 1
+                if img_dir:
+                    stem = sanitize_filename(name) + (f'_{sanitize_filename(var)}' if var else '')
+                    url = save_image(img_dir, cat, stem, data, image_urls)
+                    db.execute("INSERT OR REPLACE INTO images VALUES (?,?,?,?)",
+                               (cat, name, var, url))
                 else:
-                    misses.append((cat, name, var))
-                n_done += 1
-                if n_done % 500 == 0:
-                    print(f"    {n_done}/{len(tasks)} images processed")
+                    db.execute("INSERT OR REPLACE INTO images VALUES (?,?,?,?,?)",
+                               (cat, name, var, sqlite3.Binary(data), fn))
+            else:
+                misses.append((cat, name, var))
+            n_done += 1
+            if n_done % 500 == 0:
+                print(f"    {n_done}/{len(tasks)} images processed")
 
         db.commit()
         print("\n    per-category hit-rate:")

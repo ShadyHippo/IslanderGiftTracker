@@ -1,18 +1,26 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <path
-    d="M32 8 C18 14 6 26 8 44 C10 56 20 62 32 62 C44 62 54 56 56 44 C58 26 46 14 32 8 Z"
-    fill="#7cc15c"
-  />
-  <path
-    d="M32 58 C30 40 30 22 32 8"
-    fill="none"
-    stroke="#57943f"
-    stroke-width="3"
-    stroke-linecap="round"
-  />
-  <path d="M15 36 C22 33 27 31 32 29" fill="none" stroke="#57943f" stroke-width="2.5" stroke-linecap="round" />
-  <path d="M16 46 C23 43 28 41 32 40" fill="none" stroke="#57943f" stroke-width="2.5" stroke-linecap="round" />
-  <path d="M49 36 C42 33 37 31 32 29" fill="none" stroke="#57943f" stroke-width="2.5" stroke-linecap="round" />
-  <path d="M48 46 C41 43 36 41 32 40" fill="none" stroke="#57943f" stroke-width="2.5" stroke-linecap="round" />
-  <rect x="30" y="60" width="4" height="4" rx="2" fill="#57943f" />
+  <path d="M8.5 11 H15" stroke="#b7c4ba" stroke-width="2" stroke-linecap="round" fill="none"/>
+  <path d="M5.5 17.5 H12.5" stroke="#aebbb0" stroke-width="2" stroke-linecap="round" fill="none"/>
+  <path d="M9 23.5 H14" stroke="#cbd6cd" stroke-width="2" stroke-linecap="round" fill="none"/>
+  <g transform="rotate(7 32 34)">
+    <path d="M31.5 32.5 C30.5 36.5 33 39.5 32 43.6" fill="none" stroke="#a8adb4" stroke-width="2" stroke-linecap="round"/>
+    <defs>
+      <clipPath id="b">
+        <path d="M32 3 C24.8 3 19.5 8 19.5 14.5 C19.5 21.8 25.5 27.3 32 29 C38.5 27.3 44.5 21.8 44.5 14.5 C44.5 8 39.2 3 32 3 Z"/>
+      </clipPath>
+    </defs>
+    <path d="M32 3 C24.8 3 19.5 8 19.5 14.5 C19.5 21.8 25.5 27.3 32 29 C38.5 27.3 44.5 21.8 44.5 14.5 C44.5 8 39.2 3 32 3 Z" fill="#e2483d"/>
+    <g clip-path="url(#b)">
+      <ellipse cx="25.5" cy="8.8" rx="4.6" ry="2.8" fill="#ffffff" opacity=".38" transform="rotate(-18 25.5 8.8)"/>
+    </g>
+    <path d="M29.8 28.6 L34.2 28.6 L33 32.4 L31 32.4 Z" fill="#c93a30"/>
+    <g transform="translate(32,46)">
+      <rect x="-13" y="2" width="26" height="13" rx="1.6" fill="#4f8fd0"/>
+      <rect x="-15" y="-2.2" width="30" height="4.8" rx="1.4" fill="#5fa0dd"/>
+      <rect x="-2.2" y="-2.2" width="4.4" height="17.2" fill="#ffe082"/>
+      <path d="M0 -2.4 C-4 -5.6 -7.2 -3.6 -5.5 -.8 C-4 1.6 -1.5 .6 0 -2.4 Z" fill="#ffc107"/>
+      <path d="M0 -2.4 C4 -5.6 7.2 -3.6 5.5 -.8 C4 1.6 1.5 .6 0 -2.4 Z" fill="#ffc107"/>
+      <ellipse cx="0" cy="-2.2" rx="1.8" ry="1.6" fill="#e8a200"/>
+    </g>
+  </g>
 </svg>

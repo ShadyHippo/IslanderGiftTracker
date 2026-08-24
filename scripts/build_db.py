@@ -1066,7 +1066,14 @@ def main():
             with open(MISSED_LOG, "w") as f:
                 for cat, name, var in sorted(misses):
                     f.write(f"{cat}\t{name}\t{var}\n")
-            print(f"    misses: {len(misses)} -> {os.path.basename(MISSED_LOG)}")
+            # Ship the list next to the db so container builds keep it visible
+            # (ROOT/ is discarded inside docker; the out-dir is not).
+            shipped = os.path.join(os.path.dirname(OUT_DB), "images-missed.txt")
+            with open(shipped, "w") as f:
+                for cat, name, var in sorted(misses):
+                    f.write(f"{cat}\t{name}\t{var}\n")
+            print(f"    misses: {len(misses)} -> {os.path.basename(MISSED_LOG)}"
+                  f" + {os.path.dirname(OUT_DB)}/images-missed.txt")
     else:
         print("[3/4] skipping images (--no-images)")
 

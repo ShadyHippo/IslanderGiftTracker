@@ -12,9 +12,23 @@
   let error = $state<string | null>(null);
   let submitting = $state(false);
 
-  // Which door the server exposes. Defaults to password so a slow /api/auth
-  // config response never blanks the form; swapped if the server says google.
-  let cfg = $state<AuthConfig>({ mode: 'password' });
+  // Which door the server exposes. Unknown until /api/auth/config answers —
+  // we NEVER render a guessed door (wrong-form flash), and we cache the answer
+  // so every later visit paints the right one on first render.
+  const CFG_KEY = 'acnh.authcfg';
+  function cachedCfg(): AuthConfig | null {
+    try {
+      const raw = localStorage.getItem(CFG_KEY);
+      if (!raw) return null;
+      const v: unknown = JSON.parse(raw);
+      const mode = (v as AuthConfig | null)?.mode;
+      if (mode === 'password' || mode === 'google') return v as AuthConfig;
+    } catch {
+      /* corrupt/private-mode: fall through as unknown */
+    }
+    return null;
+  }
+  let cfg = $state<AuthConfig | null>(cachedCfg());
   const isSecure =
     typeof location !== 'undefined' &&
     (location.protocol === 'https:' || location.hostname === 'localhost');
@@ -25,10 +39,23 @@
       ? new URLSearchParams(location.search).get('login_error')
       : null;
 
+  async function loadConfig() {
+    try {
+      const c = await authConfig();
+      cfg = c;
+      try {
+        localStorage.setItem(CFG_KEY, JSON.stringify(c));
+      } catch {
+        /* storage unavailable: spinner-only on future loads */
+      }
+    } catch {
+      // Server unreachable: keep the spinner (never assume a door), retry.
+      setTimeout(loadConfig, 3000);
+    }
+  }
+
   onMount(() => {
-    void authConfig()
-      .then((c) => (cfg = c))
-      .catch(() => {}); // unreachable server: keep whatever rendered
+    void loadConfig();
   });
 
   async function onSubmit(event: SubmitEvent) {
@@ -60,7 +87,14 @@
       </p>
     {/if}
 
-    {#if cfg.mode === 'google'}
+    {#if cfg === null}
+      <!-- Same gentle spinner as the boot screen: nothing flashes, nothing is
+           assumed while the config round-trip is in flight. -->
+      <div class="flex flex-col items-center justify-center gap-3 py-10" role="status" aria-live="polite">
+        <span class="h-10 w-10 animate-spin rounded-full border-4 border-green-200 border-t-green-700"></span>
+        <p class="text-sm font-medium text-green-700">Getting your island ready…</p>
+      </div>
+    {:else if cfg.mode === 'google'}
       <a
         href="/api/auth/google/start"
         class="flex w-full items-center justify-center gap-3 rounded-lg border border-green-300 bg-white px-4 py-3 text-base font-semibold text-green-900 no-underline shadow-sm transition-colors hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-green-300"

@@ -1,3 +1,18 @@
+<script lang="ts" module>
+  /**
+   * Survives component unmount: sv-router tears this component down when you
+   * open a villager and rebuilds it on back. Re-running ~500 sql.js queries
+   * plus slugifying on every remount was a large chunk of the iOS "back is
+   * slow" symptom. The reference db is immutable within a session, so the
+   * cache can never go stale.
+   */
+  let listCache: {
+    villagers: Villager[];
+    images: Map<string, string>;
+    searchIndex: { v: Villager; hay: string }[];
+  } | null = null;
+</script>
+
 <script lang="ts">
   import { getRefDbState, loadReferenceDb } from './refdb.svelte';
   import { allVillagers, slugify, villagerImageUrls, type Villager } from './villagers';
@@ -33,17 +48,25 @@
 
   $effect(() => {
     const db = refdb.db;
-    if (db) {
-      // Build from a LOCAL: reading the `villagers` state here would make
-      // this effect depend on its own write and loop forever.
-      const rows = allVillagers(db);
-      villagers = rows;
-      images = villagerImageUrls(db);
-      searchIndex = rows.map((v) => ({
-        v,
-        hay: `${slugify(v.name)} ${slugify(v.species)} ${slugify(v.personality)} ${slugify(v.hobby)}`,
-      }));
+    if (!db) return;
+    if (listCache) {
+      villagers = listCache.villagers;
+      images = listCache.images;
+      searchIndex = listCache.searchIndex;
+      return;
     }
+    // Build from LOCALS: reading the `villagers` state here would make this
+    // effect depend on its own write and loop forever.
+    const rows = allVillagers(db);
+    const imgs = villagerImageUrls(db);
+    const idx = rows.map((v) => ({
+      v,
+      hay: `${slugify(v.name)} ${slugify(v.species)} ${slugify(v.personality)} ${slugify(v.hobby)}`,
+    }));
+    villagers = rows;
+    images = imgs;
+    searchIndex = idx;
+    listCache = { villagers: rows, images: imgs, searchIndex: idx };
   });
 
   const flags = $derived.by(() => {
@@ -63,6 +86,34 @@
     if (showFavorites) list = list.filter((e) => flags.get(e.v.name)?.favorite);
     if (showIsland) list = list.filter((e) => flags.get(e.v.name)?.onIsland);
     return list.map((e) => e.v);
+  });
+
+  // --- Chunked rendering ------------------------------------------------------
+  // WebKit (iOS Safari) stalls badly when a single layout inserts hundreds of
+  // rows at once — that's the "removing the last character / toggling a filter
+  // off hangs the UI" report. Bound the per-frame work instead: paint the
+  // first slice immediately, then append one batch per animation frame until
+  // the list is complete. Total time is similar; the UI never freezes.
+  const INITIAL_ROWS = 60;
+  const CHUNK_ROWS = 100;
+  let renderCount = $state(INITIAL_ROWS);
+
+  $effect(() => {
+    const total = filtered.length;
+    let count = Math.min(total, INITIAL_ROWS);
+    renderCount = count;
+    if (count >= total) return;
+    let cancelled = false;
+    const step = () => {
+      if (cancelled) return;
+      count = Math.min(total, count + CHUNK_ROWS);
+      renderCount = count;
+      if (count < total) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+    return () => {
+      cancelled = true;
+    };
   });
 
   function imgFor(name: string): string | null {
@@ -195,13 +246,10 @@
         <p class="py-10 text-center text-green-700">No villagers match “{search.raw}”.</p>
       {:else}
         <ul class="mx-auto max-w-2xl divide-y divide-green-200 overflow-hidden rounded-xl border border-green-200 bg-white">
-          {#each filtered as v (v.name)}
+          {#each filtered.slice(0, renderCount) as v (v.name)}
             {@const fav = flags.get(v.name)?.favorite ?? false}
             {@const island = flags.get(v.name)?.onIsland ?? false}
-            <!-- content-visibility lets the browser skip off-screen rows, which
-                 takes the edge off regrowing the full list when filters turn
-                 off or characters get deleted -->
-            <li class="flex items-center gap-2 px-4 py-3 [content-visibility:auto] [contain-intrinsic-size:auto_72px] hover:bg-green-50">
+            <li class="flex items-center gap-2 px-4 py-3 hover:bg-green-50">
               <a
                 href={p('/villager/:name', { params: { name: slugify(v.name) } })}
                 class="flex min-w-0 flex-1 items-center gap-3"
@@ -212,6 +260,7 @@
                     alt={v.name}
                     class="h-12 w-12 shrink-0 rounded-full object-cover"
                     loading="lazy"
+                    decoding="async"
                   />
                 {:else}
                   <span

@@ -45,16 +45,23 @@
   /** Precomputed per-item haystacks — built once when the villager loads,
    //  so keystrokes only run string.includes, never slugify-per-item. */
   let groupIndex = $state(new Map<string, { idea: GiftIdea; hay: string }[]>());
-  function searchItems(group: GiftGroup): GiftIdea[] {
-    if (!giftQ) return group.items;
-    const idx = groupIndex.get(group.key);
-    if (!idx) return group.items;
-    return idx.filter((e) => e.hay.includes(giftQ)).map((e) => e.idea);
-  }
 
-  function visibleItems(group: GiftGroup): GiftIdea[] {
-    const items = searchItems(group);
-    return showAll[group.key] ? items : items.slice(0, VISIBLE);
+  // Filtered items per group, computed ONCE per query change. The template
+  // used to call searchItems() up to three times per group per render —
+  // redundant work that WebKit amplified into visible jank while typing.
+  const searchedGroups = $derived.by(() => {
+    if (!giftQ) return groups.map((group) => ({ group, items: group.items }));
+    return groups.map((group) => {
+      const idx = groupIndex.get(group.key);
+      const items = !idx
+        ? group.items
+        : idx.filter((e) => e.hay.includes(giftQ)).map((e) => e.idea);
+      return { group, items };
+    });
+  });
+
+  function visibleItems(items: GiftIdea[], groupKey: string): GiftIdea[] {
+    return showAll[groupKey] ? items : items.slice(0, VISIBLE);
   }
 
   function thumbFor(groupKey: string, idea: GiftIdea): string | null {
@@ -112,13 +119,13 @@
   // Load thumbnails for the currently visible items per group (reads filter
   // state; writes only the groupImages map — no self-loop).
   $effect(() => {
-    if (!groups.length) return;
+    if (!searchedGroups.length) return;
     const db = refdb.db;
     if (!db) return;
     const next = new Map<string, Map<string, string>>();
-    for (const g of groups) {
-      const names = [...new Set(visibleItems(g).map((i) => i.name))];
-      next.set(g.key, giftImageUrls(db, g, names));
+    for (const { group, items } of searchedGroups) {
+      const names = [...new Set(visibleItems(items, group.key).map((i) => i.name))];
+      next.set(group.key, giftImageUrls(db, group, names));
     }
     groupImages = next;
   });
@@ -222,7 +229,7 @@
         {#if groups.length === 0}
           <p class="text-sm text-green-700">No matches found.</p>
         {:else}
-          {#snippet groupDetails(group: GiftGroup)}
+          {#snippet groupDetails(group: GiftGroup, items: GiftIdea[])}
             <details class="group rounded-xl border border-green-200">
               <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
                 <span class="flex items-baseline gap-2">
@@ -234,9 +241,9 @@
                 <span class="text-green-400 transition-transform group-open:rotate-90">›</span>
               </summary>
 
-              {#if searchItems(group).length > 0}
+              {#if items.length > 0}
                 <ul class="divide-y divide-green-100 border-t border-green-100">
-                {#each visibleItems(group) as idea}
+                {#each visibleItems(items, group.key) as idea}
                   {@const isGifted = gifted.has(idea.name)}
                   <li class="flex items-start gap-3 px-4 py-2.5 transition-opacity {isGifted ? 'opacity-60' : ''}">
                     {#if thumbFor(group.key, idea)}
@@ -245,6 +252,7 @@
                         alt={idea.name}
                         class="h-12 w-12 shrink-0 rounded-lg object-cover"
                         loading="lazy"
+                        decoding="async"
                       />
                     {:else}
                       <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-green-100 text-green-600">
@@ -291,12 +299,12 @@
                 {/each}
                 </ul>
 
-                {#if !showAll[group.key] && searchItems(group).length > VISIBLE}
+                {#if !showAll[group.key] && items.length > VISIBLE}
                   <button
                     class="w-full border-t border-green-100 px-4 py-2.5 text-sm font-medium text-green-700 hover:bg-green-50"
                     onclick={() => (showAll[group.key] = true)}
                   >
-                    Show all {fmt(searchItems(group).length - VISIBLE)} more
+                    Show all {fmt(items.length - VISIBLE)} more
                   </button>
                 {/if}
               {/if}
@@ -304,8 +312,8 @@
           {/snippet}
 
           <div class="space-y-2">
-            {#each groups as group}
-              {@render groupDetails(group)}
+            {#each searchedGroups as { group, items }}
+              {@render groupDetails(group, items)}
             {/each}
           </div>
         {/if}

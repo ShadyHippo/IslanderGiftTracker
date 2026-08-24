@@ -22,6 +22,47 @@
   const progress = getProgressState();
   const install = getInstallState();
 
+  // --- Boot spinner -----------------------------------------------------------
+  // Cold start, password sign-in, and the return trip from Google all funnel
+  // through here: one calm, opaque, centered spinner while the on-device dbs
+  // warm up, instead of bars flashing and half-built screens. HARD CAP: 2s for
+  // the post-auth boot, 1.2s for the initial session check — the spinner is
+  // never allowed to become a second loading screen.
+  const BOOT_CAP_MS = 2000;
+  const SESSION_CHECK_CAP_MS = 1200;
+  let bootStartedAt = 0;
+  let authCheckStartedAt = 0;
+  let bootExpired = $state(false);
+  let authCheckExpired = $state(false);
+  // A failed OAuth redirect lands on /?login_error=... — show the form (with
+  // the reason) immediately instead of spinning.
+  const hasLoginError =
+    typeof location !== 'undefined' &&
+    new URLSearchParams(location.search).has('login_error');
+
+  const waitingForSession = $derived(
+    session.checking && !session.user && !authCheckExpired && !hasLoginError,
+  );
+  const booting = $derived(
+    session.user && refdb.status !== 'ready' && !bootExpired,
+  );
+
+  $effect(() => {
+    if (booting && bootStartedAt === 0) {
+      bootStartedAt = Date.now();
+      const t = setTimeout(() => (bootExpired = true), BOOT_CAP_MS);
+      return () => clearTimeout(t);
+    }
+  });
+
+  $effect(() => {
+    if (waitingForSession && authCheckStartedAt === 0) {
+      authCheckStartedAt = Date.now();
+      const t = setTimeout(() => (authCheckExpired = true), SESSION_CHECK_CAP_MS);
+      return () => clearTimeout(t);
+    }
+  });
+
   onMount(() => {
     void checkSession();
     void checkInstall();
@@ -86,7 +127,18 @@
   });
 </script>
 
-{#if !session.user && !isPublicPage}
+{#if waitingForSession || booting}
+  <!--
+    Calm boot screen: opaque so nothing underneath flashes through. Shown
+    while the session confirms and the on-device reference db decompresses —
+    both are local/fast when cached, and the caps above guarantee this never
+    outstays its welcome.
+  -->
+  <div class="fixed inset-0 z-[90] flex flex-col items-center justify-center gap-4 bg-green-50" style="padding-top: env(safe-area-inset-top, 0px)">
+    <span class="h-10 w-10 animate-spin rounded-full border-4 border-green-200 border-t-green-700"></span>
+    <p class="text-sm font-medium text-green-700">Getting your island ready…</p>
+  </div>
+{:else if !session.user && !isPublicPage}
   <!--
     No cached user: show the login form immediately (no network wait).
     checkSession() revalidates in the background — anyone holding a valid
@@ -101,7 +153,7 @@
     {#if progress.status === 'ready'}
       <SaveBadges />
     {/if}
-    {#if refdb.status === 'downloading' || refdb.status === 'initializing'}
+    {#if refdb.status === 'downloading' || (refdb.status === 'initializing' && refdb.downloaded)}
       <div class="fixed inset-x-0 top-0 z-50 flex flex-col items-center gap-1 bg-amber-100/95 px-4 py-2 text-center text-sm font-medium text-amber-900 shadow backdrop-blur" style="padding-top: env(safe-area-inset-top, 12px)">
         <span class="flex items-center gap-2">
           <span class="h-3 w-3 animate-spin rounded-full border-2 border-amber-900/30 border-t-amber-900"></span>

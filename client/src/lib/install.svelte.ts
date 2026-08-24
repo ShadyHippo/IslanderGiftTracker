@@ -168,6 +168,12 @@ export async function runInstall(): Promise<void> {
     let entriesFailed = 0;
     // Writes are chained so only one cache.put runs at a time.
     let putChain: Promise<void> = Promise.resolve();
+    // Progress is single-writer per phase: while the stream is reading, the
+    // byte-based download formula owns the bar. Only after the stream ends do
+    // completed-file counts take over. Both formulas firing at once used to
+    // make the bar visibly flash between download % and the 97% extraction
+    // cap, because cache.puts complete while chunks are still arriving.
+    let streamEnded = false;
 
     const onFile = (file: UnzipFile) => {
       entriesFound++;
@@ -191,10 +197,10 @@ export async function runInstall(): Promise<void> {
               entriesFailed++;
             }
             entriesDone++;
-            // Extraction/saving phase: 80%..97% follows stored-file count so
-            // the bar keeps moving while trailing cache.puts drain (it used
-            // to freeze at ~95% on bytes-done alone).
-            if (entriesFound > 0) {
+            // Extraction phase (after the stream ends): 80%..97% follows the
+            // stored-file count so the bar keeps moving while trailing
+            // cache.puts drain.
+            if (streamEnded && entriesFound > 0) {
               install.progress = Math.min(
                 97,
                 80 + 17 * (entriesDone / entriesFound),
@@ -245,6 +251,7 @@ export async function runInstall(): Promise<void> {
           }
         }
         install.detail = 'Saving images to this device…';
+        streamEnded = true;
         unzip.push(new Uint8Array(0), true); // end of archive
         break; // downloaded fully
       } catch (e) {

@@ -1157,6 +1157,45 @@ def main():
     if thumb:
         print(f"  (images downscaled to max {thumb}px)")
 
+    if img_dir:
+        verify_images(db_path=OUT_DB, img_dir=img_dir)
+
+
+def verify_images(db_path, img_dir):
+    """Walk EVERY image url the db can generate and assert the file exists.
+
+    A db row whose file is missing ships as a broken thumbnail (or the green
+    letter fallback) on user devices — silent until someone notices one item.
+    This makes the gap loud at build time instead. Exits nonzero on misses.
+    """
+    import sqlite3
+    db = sqlite3.connect(db_path)
+    checks = [("images", "SELECT url FROM images"),
+              ("house_item_images", "SELECT url FROM house_item_images"),
+              ("house_images", "SELECT url FROM house_images")]
+    total, missing = 0, []
+    for table, q in checks:
+        try:
+            rows = db.execute(q).fetchall()
+        except sqlite3.OperationalError:
+            continue  # table absent (e.g. --no-images builds)
+        for (url,) in rows:
+            if not url:
+                continue
+            total += 1
+            if not os.path.exists(os.path.join(img_dir, url.lstrip('/'))):
+                missing.append((table, url))
+    db.close()
+    print(f"[audit] {total} image urls checked against {img_dir}/")
+    if missing:
+        print(f"[audit] MISSING {len(missing)} files:")
+        for table, url in missing[:50]:
+            print(f"  {table}: {url}")
+        if len(missing) > 50:
+            print(f"  ... and {len(missing) - 50} more")
+        raise SystemExit(f"[audit] FAILED: {len(missing)} image urls have no file on disk")
+    print("[audit] OK — every generated image link resolves to a file")
+
 
 if __name__ == "__main__":
     main()

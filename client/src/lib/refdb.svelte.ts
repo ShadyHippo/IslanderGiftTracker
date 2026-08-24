@@ -15,7 +15,16 @@ interface RefManifest {
 }
 
 const state = $state({
-  status: 'idle' as 'idle' | 'downloading' | 'initializing' | 'ready' | 'error',
+  status: 'idle' as
+    | 'idle'
+    | 'checking'
+    | 'downloading'
+    | 'initializing'
+    | 'ready'
+    | 'error',
+  /** True once bytes were actually fetched this load (gates the banner so a
+   *  fully-cached cold start never shows download UI). */
+  downloaded: false,
   progress: 0,
   error: null as string | null,
   db: null as Database | null,
@@ -130,8 +139,12 @@ export function initSql(): Promise<SqlJsStatic> {
 }
 
 export async function loadReferenceDb(): Promise<void> {
-  state.status = 'downloading';
+  // 'checking' is silent: the manifest round-trip (and an IndexedDB cache hit
+  // that follows) must never flash a "Downloading… 0%" bar at users whose
+  // data is already on device.
+  state.status = 'checking';
   state.progress = 0;
+  state.downloaded = false;
   state.error = null;
   try {
     // Try to fetch manifest; if server is offline, fall back to cached DB
@@ -167,9 +180,11 @@ export async function loadReferenceDb(): Promise<void> {
     if (cached && cached.version === manifest.latest && cached.sha === entry.sha256) {
       gz = cached.bytes;
     } else {
+      state.status = 'downloading';
       gz = await download(`/db/${entry.file}`, entry.size, (f) => {
         state.progress = Math.round(f * 100);
       });
+      state.downloaded = true;
       // Switch to "preparing" BEFORE hashing/decompressing: these phases can
       // take seconds on phones and used to show a frozen download percentage,
       // which read as a stall at ~95%.

@@ -173,6 +173,9 @@
           ></div>
         </div>
       </div>
+    {:else if refdb.status === 'checking'}
+      <!-- silent: the boot spinner (App.svelte) covers this window -->
+      <p class="py-10 text-center text-green-700">Loading…</p>
     {:else if refdb.status === 'initializing'}
       <div class="mx-auto max-w-sm rounded-xl border border-green-200 bg-white p-6 text-center">
         <p class="text-green-800">Loading villagers…</p>

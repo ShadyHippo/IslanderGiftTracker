@@ -1162,18 +1162,29 @@ def main():
 
 
 def verify_images(db_path, img_dir):
-    """Walk EVERY image url the db can generate and assert the file exists.
+    """Audit EVERY image url the db can generate against the built artifacts.
 
-    A db row whose file is missing ships as a broken thumbnail (or the green
-    letter fallback) on user devices — silent until someone notices one item.
+    Two things ship to prod and both must cover each url: the loose webp tree
+    (GET /img/{category}/{filename}) and the install bundle images.zip (what
+    client installs fetch). A db row missing from either ships as a broken
+    thumbnail or a failed install — silent until someone notices one item.
     This makes the gap loud at build time instead. Exits nonzero on misses.
     """
     import sqlite3
+    import zipfile
+    # save_image() urls are /img/-prefixed; on disk they live under the PARENT
+    # of img_dir (img_dir itself is .../img).
+    root = os.path.dirname(img_dir.rstrip('/'))
+    zip_entries = set()
+    zip_path = os.path.join(img_dir, 'images.zip')
+    if os.path.exists(zip_path):
+        with zipfile.ZipFile(zip_path) as zf:
+            zip_entries = set(zf.namelist())
     db = sqlite3.connect(db_path)
     checks = [("images", "SELECT url FROM images"),
               ("house_item_images", "SELECT url FROM house_item_images"),
               ("house_images", "SELECT url FROM house_images")]
-    total, missing = 0, []
+    total, missing_disk, missing_zip = 0, [], []
     for table, q in checks:
         try:
             rows = db.execute(q).fetchall()
@@ -1183,18 +1194,36 @@ def verify_images(db_path, img_dir):
             if not url:
                 continue
             total += 1
-            if not os.path.exists(os.path.join(img_dir, url.lstrip('/'))):
-                missing.append((table, url))
+            rel = url.lstrip('/')
+            if os.path.exists(os.path.join(root, rel)):
+                pass
+            else:
+                missing_disk.append((table, url))
+            # zip stores paths relative to img_dir ("housewares/x.webp")
+            in_zip = rel[len('img/'):] in zip_entries if rel.startswith('img/') else False
+            if zip_entries and not in_zip:
+                missing_zip.append((table, url))
     db.close()
-    print(f"[audit] {total} image urls checked against {img_dir}/")
-    if missing:
-        print(f"[audit] MISSING {len(missing)} files:")
-        for table, url in missing[:50]:
+    print(f"[audit] {total} image urls checked; disk={img_dir}/ "
+          f"zip={len(zip_entries)} entries")
+    failed = False
+    if missing_disk:
+        failed = True
+        print(f"[audit] MISSING {len(missing_disk)} files on disk:")
+        for table, url in missing_disk[:20]:
             print(f"  {table}: {url}")
-        if len(missing) > 50:
-            print(f"  ... and {len(missing) - 50} more")
-        raise SystemExit(f"[audit] FAILED: {len(missing)} image urls have no file on disk")
-    print("[audit] OK — every generated image link resolves to a file")
+        if len(missing_disk) > 20:
+            print(f"  ... and {len(missing_disk) - 20} more")
+    if missing_zip:
+        failed = True
+        print(f"[audit] MISSING {len(missing_zip)} entries in images.zip:")
+        for table, url in missing_zip[:20]:
+            print(f"  {table}: {url}")
+        if len(missing_zip) > 20:
+            print(f"  ... and {len(missing_zip) - 20} more")
+    if failed:
+        raise SystemExit("[audit] FAILED: image urls above have no served file")
+    print("[audit] OK — every generated image link resolves on disk and in images.zip")
 
 
 if __name__ == "__main__":

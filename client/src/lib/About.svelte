@@ -5,6 +5,7 @@
   import { deleteAccount } from './api';
   import { detectPlatform, isStandalone, installHint } from './platform.svelte';
   import { navigate } from './router';
+  import { purgeOfflineCaches } from './maintenance';
 
   const about = getAbout();
   const progress = getProgressState();
@@ -16,35 +17,16 @@
   const BUILD_TIME: string =
     typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : '';
 
+  // Platform can't change while the app runs (installing the PWA always
+  // means a fresh session), so these are plain values, not state.
+  const platform = { p: detectPlatform(), standalone: isStandalone() };
+
   let clearing = $state(false);
-  async function hardReload(): Promise<void> {
+  async function onClearCache(): Promise<void> {
     if (clearing) return;
     if (!confirm('Clear offline cache and hard reload?\n\nRe-downloads images on next load. Your gift progress is kept (re-synced from server).')) return;
     clearing = true;
-    try {
-      if ('caches' in window) {
-        const keys = await caches.keys();
-        await Promise.all(keys.map((k) => caches.delete(k)));
-      }
-      if ('serviceWorker' in navigator) {
-        const regs = await navigator.serviceWorker.getRegistrations();
-        await Promise.all(regs.map((r) => r.unregister()));
-      }
-      // Clear the precache fingerprint so images re-cache on next load
-      try {
-        const idb: IDBDatabase = await new Promise((res, rej) => {
-          const req = indexedDB.open('acnh', 2);
-          req.onsuccess = () => res(req.result);
-          req.onerror = () => rej(req.error);
-        });
-        await new Promise<void>((res) => {
-          const tx = idb.transaction('imgcache', 'readwrite');
-          tx.objectStore('imgcache').clear();
-          tx.oncomplete = () => { idb.close(); res(); };
-          tx.onerror = () => { idb.close(); res(); };
-        });
-      } catch {}
-    } catch {}
+    await purgeOfflineCaches();
     location.reload();
   }
 
@@ -77,14 +59,6 @@
   function onKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape' && about.open) dismissAbout();
   }
-
-  const platform = $state({ p: 'desktop' as ReturnType<typeof detectPlatform>, standalone: false });
-  $effect(() => {
-    if (about.open) {
-      platform.p = detectPlatform();
-      platform.standalone = isStandalone();
-    }
-  });
 </script>
 
 <svelte:window onkeydown={onKeydown} />
@@ -100,6 +74,7 @@
     >
       <h2 id="about-title" class="mb-4 text-xl font-bold text-green-800">About this app</h2>
 
+      <!-- ═══════ 1. One-device warning ═══════ -->
       <div class="mb-4 rounded-lg border-2 border-red-500 bg-yellow-100 p-3">
         <p class="text-sm font-extrabold text-red-900">⚠️ ONE DEVICE PER ACCOUNT</p>
         <p class="mt-1 text-sm font-bold leading-snug text-red-900">
@@ -108,6 +83,7 @@
         </p>
       </div>
 
+      <!-- ═══════ 2. Your data & offline mode (export + danger zone) ═══════ -->
       <section class="mb-5">
         <h3 class="mb-1 text-sm font-bold text-green-900">Your data &amp; offline mode</h3>
         <p class="text-xs leading-relaxed text-green-700">
@@ -148,6 +124,7 @@
         {/if}
       </section>
 
+      <!-- ═══════ 3. Install like an app ═══════ -->
       <section class="mb-5">
         <h3 class="mb-1 text-sm font-bold text-green-900">Install like an app</h3>
         {#if platform.standalone}
@@ -162,7 +139,7 @@
         {/if}
         <button
           type="button"
-          onclick={hardReload}
+          onclick={onClearCache}
           disabled={clearing}
           class="mt-2 text-[11px] font-medium text-green-600 underline decoration-dotted hover:text-green-800 disabled:opacity-50"
           title="Clear offline cache & hard reload"
@@ -171,6 +148,7 @@
         </button>
       </section>
 
+      <!-- ═══════ 4. Legal ═══════ -->
       <p class="mb-2 text-sm leading-relaxed text-green-900">
         This is a non-commercial fan project. We own nothing of the images — all
         artwork and game content belong to their original owners.
@@ -180,6 +158,7 @@
         This app is not affiliated with or endorsed by Nintendo.
       </p>
 
+      <!-- ═══════ 5. Support ═══════ -->
       <a
         href="https://buymeacoffee.com/timvandyke"
         target="_blank"
@@ -189,6 +168,7 @@
         ☕ Buy me a coffee
       </a>
 
+      <!-- ═══════ 6. Links + build marker ═══════ -->
       <div class="mb-4 flex items-center justify-between gap-3 text-xs">
         <a
           href="https://github.com/ShadyHippo/IslanderGiftTracker"
@@ -220,6 +200,7 @@
         {BUILD_HASH}{BUILD_TIME ? ` · ${BUILD_TIME}` : ''}
       </p>
 
+      <!-- ═══════ 7. Close ═══════ -->
       <button
         type="button"
         data-about-close

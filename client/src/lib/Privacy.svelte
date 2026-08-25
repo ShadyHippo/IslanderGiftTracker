@@ -21,7 +21,7 @@
       <ul class="list-disc space-y-1 pl-5 text-sm leading-relaxed text-green-700">
         <li>Your <strong>account</strong>: a name plus either a password hash (never stored in readable form) or your Google account identity — an opaque ID and your email address, depending on how this instance is set up.</li>
         <li>Your <strong>gift log and villager flags</strong> (favorites, on-island) — this is the data you create.</li>
-        <li>Recent backups of that data on the server, so mistakes can be undone.</li>
+        <li>Recent backups of that data on the server</li>
       </ul>
     </section>
 

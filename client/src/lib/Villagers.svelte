@@ -169,16 +169,25 @@
         <ConnectionStatus />
         <h1 class="text-xl font-bold text-green-800">Villagers</h1>
       </div>
-      <button
-        onclick={onLogout}
-        disabled={loggingOut || (!net.online && progress.dirty)}
-        title={!net.online && progress.dirty
-          ? "You have unsaved changes that haven't synced yet — they'll upload when you're back online."
-          : undefined}
-        class="rounded-lg border border-green-300 bg-white px-3 py-1.5 text-sm text-green-800 hover:bg-green-100 disabled:opacity-60"
-      >
-        {loggingOut ? 'Signing out…' : !net.online && progress.dirty ? 'Unsaved…' : 'Sign out'}
-      </button>
+      <div class="flex items-center gap-2">
+        <button
+          type="button"
+          onclick={openAbout}
+          class="rounded-lg bg-green-100 px-3 py-1.5 text-sm font-semibold text-green-800 transition-colors hover:bg-green-200 focus:outline-none focus:ring-2 focus:ring-green-200"
+        >
+          About
+        </button>
+        <button
+          onclick={onLogout}
+          disabled={loggingOut || (!net.online && progress.dirty)}
+          title={!net.online && progress.dirty
+            ? "You have unsaved changes that haven't synced yet — they'll upload when you're back online."
+            : undefined}
+          class="rounded-lg border border-green-300 bg-white px-3 py-1.5 text-sm text-green-800 hover:bg-green-100 disabled:opacity-60"
+        >
+          {loggingOut ? 'Signing out…' : !net.online && progress.dirty ? 'Unsaved…' : 'Sign out'}
+        </button>
+      </div>
     </div>
     <input
       bind:value={search.raw}
@@ -205,13 +214,6 @@
             : 'border-green-300 bg-white text-green-700 hover:bg-green-100'}"
         >
           ✓ On my island
-        </button>
-        <button
-          type="button"
-          onclick={openAbout}
-          class="ml-auto self-center rounded-lg border border-green-300 bg-white px-3 py-1.5 text-sm font-semibold text-green-800 transition-colors hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-green-200"
-        >
-          About
         </button>
       </div>
       <p class="mt-2 text-xs text-green-700">

@@ -12,7 +12,15 @@
     type GiftIdea,
     type HouseItemDetail,
   } from './gifts';
-  import { getProgressState, giftedItems, toggleGifted } from './progress.svelte';
+  import {
+    getProgressState,
+    giftedItems,
+    toggleGifted,
+    toggleFavorite,
+    toggleOnIsland,
+    allVillagerFlags,
+    type VillagerFlags,
+  } from './progress.svelte';
   import ConnectionStatus from './ConnectionStatus.svelte';
   import { route, navigate } from './router';
   import { createDebouncedQuery } from './search.svelte';
@@ -22,6 +30,14 @@
 
   const name = $derived(route.params.name ?? '');
   let villager: VillagerRow | null = $state(null);
+
+  // Same flags the search-page pills read — the header buttons below mirror
+  // those exactly (look + behavior), just for this one villager.
+  const flags = $derived.by(() => {
+    if (!progress.db) return new Map<string, VillagerFlags>();
+    void progress.version;
+    return allVillagerFlags();
+  });
   let imgUrl: string | null = $state(null);
   let groups: GiftGroup[] = $state([]);
   let house = $state<Map<string, HouseItemDetail>>(new Map());
@@ -154,32 +170,57 @@
       ← Back
     </button>
     <ConnectionStatus />
-    <h1 class="truncate text-xl font-bold text-green-800">{name}</h1>
+    <h1 class="min-w-0 flex-1 truncate text-xl font-bold text-green-800">{name}</h1>
+    {#if villager}
+      {@const fav = flags.get(villager.name)?.favorite ?? false}
+      {@const island = flags.get(villager.name)?.onIsland ?? false}
+      <button
+        aria-label={`Toggle favorite for ${villager.name}`}
+        aria-pressed={fav}
+        title={fav ? 'Unfavorite' : 'Favorite'}
+        onclick={() => toggleFavorite(villager!.name)}
+        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm font-bold transition-colors {fav
+          ? 'border-amber-400 bg-amber-400 text-white'
+          : 'border-green-300 text-amber-500 hover:bg-green-100'}"
+      >
+        ★
+      </button>
+      <button
+        aria-label={`Toggle on-island for ${villager.name}`}
+        aria-pressed={island}
+        title={island ? 'Not on my island' : 'On my island'}
+        onclick={() => toggleOnIsland(villager!.name)}
+        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm font-bold transition-colors {island
+          ? 'border-green-700 bg-green-700 text-white'
+          : 'border-green-300 text-green-600 hover:bg-green-100'}"
+      >
+        ✓
+      </button>
+    {/if}
   </header>
 
-  <main class="mx-auto max-w-2xl space-y-4 p-4">
+  <main class="mx-auto max-w-2xl space-y-3 p-3">
     {#if refdb.status !== 'ready'}
       <p class="py-10 text-center text-green-700">Loading…</p>
     {:else if !villager}
       <p class="py-10 text-center text-green-700">Villager not found.</p>
     {:else}
-      <section class="flex items-center gap-4 rounded-xl border border-green-200 bg-white p-5">
+      <!-- Compact hero: the old p-5 + 96px avatar pushed every card below the
+           fold, forcing a scroll before any real content. -->
+      <section class="flex items-center gap-3 rounded-xl border border-green-200 bg-white p-3">
         {#if imgUrl}
-          <img src={imgUrl} alt={name} class="h-24 w-24 rounded-full object-cover" />
+          <img src={imgUrl} alt={name} class="h-16 w-16 rounded-full object-cover" />
         {:else}
-          <span class="flex h-24 w-24 items-center justify-center rounded-full bg-green-600 text-3xl font-bold text-white">
+          <span class="flex h-16 w-16 items-center justify-center rounded-full bg-green-600 text-xl font-bold text-white">
             {name.charAt(0).toUpperCase()}
           </span>
         {/if}
-        <div>
-          <p class="text-2xl font-bold text-green-900">{villager.name}</p>
-          <p class="text-green-700">
+        <div class="min-w-0">
+          <p class="text-lg font-bold text-green-900">{villager.name}</p>
+          <p class="truncate text-sm text-green-700">
             {villager.species}{villager.gender ? ` · ${villager.gender.toLowerCase()}` : ''} ·
-            {villager.personality}
+            {villager.personality}{villager.hobby ? ` · ${villager.hobby}` : ''}
           </p>
-          {#if villager.hobby}
-            <p class="text-sm text-green-700">Hobby: {villager.hobby}</p>
-          {/if}
         </div>
       </section>
 

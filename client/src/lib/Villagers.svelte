@@ -11,6 +11,15 @@
     images: Map<string, string>;
     searchIndex: { v: Villager; hay: string }[];
   } | null = null;
+
+  /**
+   * Filter pills live at module scope: sv-router tears this component down
+   * when you open a villager and rebuilds it on back — instance $state would
+   * reset them every time. Module state survives remounts, so returning from
+   * a villager restores the filters exactly as they were left.
+   */
+  let showFavorites = $state(false);
+  let showIsland = $state(false);
 </script>
 
 <script lang="ts">
@@ -42,8 +51,6 @@
   let images = $state(new Map<string, string>());
   /** Precomputed search haystack per villager — built once, not per keystroke. */
   let searchIndex = $state<{ v: Villager; hay: string }[]>([]);
-  let showFavorites = $state(false);
-  let showIsland = $state(false);
   let loggingOut = $state(false);
 
   $effect(() => {

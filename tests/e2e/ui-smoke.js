@@ -29,7 +29,7 @@ try {
   // First visit: the About popup must appear and gate use until dismissed
   await page.waitForSelector('[data-about-modal]', { timeout: 10000 });
   const aboutText = (await page.textContent('[data-about-modal]')) || '';
-  if (!aboutText.includes('ONE DEVICE PER ACCOUNT')) {
+  if (!aboutText.includes('ONE DEVICE IF OFFLINE')) {
     console.error('FAIL: About popup missing the one-device warning');
     process.exit(1);
   }

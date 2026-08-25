@@ -37,11 +37,13 @@
   import { openAbout } from './about.svelte';
   import { p } from './router';
   import { createDebouncedQuery } from './search.svelte';
+  import { getInstallState, runInstall } from './install.svelte';
   import { getNet } from './net.svelte';
 
   const refdb = getRefDbState();
   const progress = getProgressState();
   const net = getNet();
+  const install = getInstallState();
 
   // Asymmetric debounce: typing applies instantly, backspacing settles after
   // a short idle so the list doesn't regrow on every deleted character.
@@ -215,6 +217,21 @@
         >
           ✓ On my island
         </button>
+        {#if install.offer}
+          <!-- Ghost button (quietest variant): the action matters but must not
+               compete with the filter pills. Hidden once installed. -->
+          <button
+            type="button"
+            onclick={() => void runInstall()}
+            disabled={install.phase === 'installing'}
+            title="Download all images to this device for offline use"
+            class="ml-auto rounded-lg px-3 py-1.5 text-sm text-green-700 transition-colors hover:bg-green-100 disabled:opacity-60"
+          >
+            {install.phase === 'installing'
+              ? `⬇ Downloading… ${install.progress}%`
+              : '⬇ Download offline images'}
+          </button>
+        {/if}
       </div>
       <p class="mt-2 text-xs text-green-700">
         {filtered.length} of {villagers.length} villagers

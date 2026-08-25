@@ -1,6 +1,9 @@
 @import "tailwindcss";
 
 html {
-  padding-top: env(safe-area-inset-top);
+  /* Status-bar clearance lives on the sticky headers (they carry
+     env(safe-area-inset-top) themselves and are pinned at every scroll
+     position) — padding it here too stacked the inset twice and left a
+     large blank band above the headings. */
   padding-bottom: env(safe-area-inset-bottom);
 }

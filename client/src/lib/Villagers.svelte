@@ -173,7 +173,7 @@
         <button
           type="button"
           onclick={openAbout}
-          class="rounded-lg bg-green-100 px-3 py-1.5 text-sm font-semibold text-green-800 transition-colors hover:bg-green-200 focus:outline-none focus:ring-2 focus:ring-green-200"
+          class="rounded-lg bg-amber-100 px-3 py-1.5 text-sm text-amber-800 transition-colors hover:bg-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-200"
         >
           About
         </button>

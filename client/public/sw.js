@@ -8,6 +8,11 @@ const SHELL_CACHE = 'acnh-shell-' + SW_VERSION;
 const DB_CACHE = 'acnh-db-v3';
 const IMG_CACHE = 'acnh-img-v3';
 
+// Cached SHELL_CACHE handle — opened once per SW lifetime, reused for every
+// navigation.  On iOS, caches.open() is expensive when IMG_CACHE has thousands
+// of entries; caching this handle avoids paying that cost on every navigation.
+let shellCache = null;
+
 // App shell: built assets from Vite + index.html
 
 // Install: cache app shell. Each file individually — one bad URL must not
@@ -15,13 +20,14 @@ const IMG_CACHE = 'acnh-img-v3';
 // real bytes.
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(SHELL_CACHE).then((cache) =>
-      Promise.all(
+    caches.open(SHELL_CACHE).then((cache) => {
+      shellCache = cache;
+      return Promise.all(
         SHELL_ASSETS.map((url) =>
           cache.add(new Request(url, { cache: 'reload' })).catch(() => {})
         )
-      )
-    )
+      );
+    })
   );
   self.skipWaiting();
 });
@@ -79,13 +85,15 @@ self.addEventListener('fetch', (event) => {
 
   // DB files: cache-first (versioned filenames, immutable)
   if (url.pathname.startsWith('/db/')) {
-    event.respondWith(cacheFirst(request, DB_CACHE));
+    event.respondWith(cacheFirst(request));
     return;
   }
 
-  // Images: cache-first with lazy caching
+  // Images: non-blocking cache-first.  Uses caches.match() (searches all
+  // caches without opening any) so the 4 800-entry IMG_CACHE never blocks
+  // navigation or other requests.
   if (url.pathname.startsWith('/img/')) {
-    event.respondWith(cacheFirst(request, IMG_CACHE));
+    event.respondWith(cacheFirst(request));
     return;
   }
 
@@ -93,59 +101,67 @@ self.addEventListener('fetch', (event) => {
   // shell so the app loads offline from any route, not just '/'. Fall back to
   // index.html if the exact path isn't cached.
   if (request.mode === 'navigate') {
-    event.respondWith(
-      (async () => {
-        const cache = await caches.open(SHELL_CACHE);
-        let response = await cache.match(request);
-        if (!response) response = await cache.match('/index.html');
-        if (response) {
-          const body = await response.clone().arrayBuffer();
-          return new Response(body, {
-            status: 200,
-            statusText: 'OK',
-            headers: { 'Content-Type': 'text/html; charset=utf-8' },
-          });
-        }
-        // Prefer the preloaded response (races SW boot + network in parallel).
-        // Falls back to direct fetch when preload is unavailable or offline.
-        let fresh;
-        try {
-          fresh = await event.preloadResponse;
-        } catch { /* preload unsupported or failed */ }
-        if (!fresh) {
-          try { fresh = await fetch(request); } catch { /* offline */ }
-        }
-        if (fresh?.ok) {
-          const base = await caches.open(SHELL_CACHE);
-          if (fresh.url === request.url || request.url.endsWith('/')) {
-            await base.put(request, fresh.clone());
-          }
-          await base.put('/index.html', fresh.clone());
-          return fresh;
-        }
-        return new Response('Offline', { status: 503 });
-      })(),
-    );
+    event.respondWith(navigateFetch(event));
     return;
   }
 
   // Hashed build assets are immutable: cache-first once seen.
   if (url.pathname.startsWith('/assets/')) {
-    event.respondWith(cacheFirst(request, SHELL_CACHE));
+    event.respondWith(cacheFirst(request));
     return;
   }
 
   // App shell assets (js/css): stale-while-revalidate
-  event.respondWith(staleWhileRevalidate(request, SHELL_CACHE));
+  event.respondWith(staleWhileRevalidate(request));
 });
 
-async function cacheFirst(request, cacheName) {
-  const cache = await caches.open(cacheName);
-  const cached = await cache.match(request);
+// Navigate handler — uses the cached SHELL_CACHE handle (opened once in
+// install) so we never call caches.open() on the hot path.
+async function navigateFetch(event) {
+  const { request } = event;
+  const cache = shellCache || await caches.open(SHELL_CACHE);
+  let response = await cache.match(request);
+  if (!response) response = await cache.match('/index.html');
+  if (response) {
+    const body = await response.clone().arrayBuffer();
+    return new Response(body, {
+      status: 200,
+      statusText: 'OK',
+      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+    });
+  }
+  // Prefer the preloaded response (races SW boot + network in parallel).
+  // Falls back to direct fetch when preload is unavailable or offline.
+  let fresh;
+  try {
+    fresh = await event.preloadResponse;
+  } catch { /* preload unsupported or failed */ }
+  if (!fresh) {
+    try { fresh = await fetch(request); } catch { /* offline */ }
+  }
+  if (fresh?.ok) {
+    if (fresh.url === request.url || request.url.endsWith('/')) {
+      await cache.put(request, fresh.clone());
+    }
+    await cache.put('/index.html', fresh.clone());
+    return fresh;
+  }
+  return new Response('Offline', { status: 503 });
+}
+
+// cache-first: reads via caches.match() (no open), only opens for writes.
+async function cacheFirst(request) {
+  const cached = await caches.match(request);
   if (cached) return cached;
   try {
     const response = await fetch(request);
     if (response.ok) {
+      // Determine which cache this URL belongs to and write there.
+      const url = new URL(request.url);
+      const cacheName = url.pathname.startsWith('/img/') ? IMG_CACHE
+        : url.pathname.startsWith('/db/') ? DB_CACHE
+        : SHELL_CACHE;
+      const cache = await caches.open(cacheName);
       cache.put(request, response.clone());
     }
     return response;
@@ -175,12 +191,19 @@ async function networkFirst(request) {
   }
 }
 
-async function staleWhileRevalidate(request, cacheName) {
-  const cache = await caches.open(cacheName);
-  const cached = await cache.match(request);
+// stale-while-revalidate: reads via caches.match(), opens only for writes.
+async function staleWhileRevalidate(request) {
+  const cached = await caches.match(request);
   const fetchPromise = fetch(request)
-    .then((response) => {
-      if (response.ok) cache.put(request, response.clone());
+    .then(async (response) => {
+      if (response.ok) {
+        const url = new URL(request.url);
+        const cacheName = url.pathname.startsWith('/img/') ? IMG_CACHE
+          : url.pathname.startsWith('/db/') ? DB_CACHE
+          : SHELL_CACHE;
+        const cache = await caches.open(cacheName);
+        cache.put(request, response.clone());
+      }
       return response;
     })
     .catch(() => cached);

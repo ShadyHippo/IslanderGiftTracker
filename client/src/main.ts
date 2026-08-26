@@ -2,10 +2,13 @@ import { mount } from 'svelte';
 import './app.css';
 import App from './App.svelte';
 
-// Build marker injected by Vite (matches the SW_VERSION baked into sw.js).
+// Build markers injected by Vite (matches the SW_VERSION baked into sw.js).
 declare const __SW_VERSION__: string;
+declare const __BUILD_HASH__: string;
 const APP_VERSION: string =
   typeof __SW_VERSION__ !== 'undefined' ? __SW_VERSION__ : 'dev';
+const BUILD_HASH: string =
+  typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev';
 
 // Register service worker for offline support. Update detection is via byte
 // change of sw.js (SW_VERSION bump at build) + the browser's normal update
@@ -39,6 +42,24 @@ navigator.serviceWorker.addEventListener('controllerchange', () => {
   }
   window.location.reload();
 });
+}
+
+// Version poll: on startup, if online, fetch /version.txt and compare to the
+// build hash in this bundle. If they differ, a new deploy exists that iOS may
+// have missed — force the waiting SW to activate and reload once.
+if (navigator.onLine) {
+  fetch('/version.txt', { cache: 'no-store' })
+    .then((r) => r.ok ? r.text() : null)
+    .then((serverHash) => {
+      if (serverHash && serverHash.trim() !== BUILD_HASH) {
+        navigator.serviceWorker?.getRegistration()?.then((reg) => {
+          if (reg?.waiting) {
+            reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+          }
+        });
+      }
+    })
+    .catch(() => {});
 }
 
 const app = mount(App, { target: document.getElementById('app')! });

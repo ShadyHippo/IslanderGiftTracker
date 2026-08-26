@@ -68,6 +68,8 @@ export default defineConfig({
           sw = sw.replace('__SHELL_ASSETS__', JSON.stringify(['/', '/index.html', ...assets]));
           sw = sw.replace('__SW_VERSION__', SW_VERSION);
           writeFileSync(swPath, sw);
+          // Write version.txt for the startup version poll (iOS SW update fix).
+          writeFileSync(join(__dirname, 'dist', 'version.txt'), BUILD_HASH);
         } catch {}
       },
     },

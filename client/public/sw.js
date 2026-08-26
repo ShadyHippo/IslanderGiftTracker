@@ -74,6 +74,13 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Version check: network-only, no cache at all. The client fetches this on
+  // startup to detect missed SW updates — must be fast and fresh.
+  if (url.pathname === '/version.txt') {
+    event.respondWith(networkOnly(request));
+    return;
+  }
+
   // Image manifest + install bundle: network-only, ALWAYS. Cache-first here
   // poisoned updates (stale manifest sizes, stale zips) — these two must
   // reflect the current deploy every single time. Checked BEFORE the /img/

@@ -11,6 +11,8 @@
   import SaveBadges from './lib/SaveBadges.svelte';
   import { route } from './lib/router';
 
+  const BUILD_HASH: string = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev';
+
   // Pages that must render WITHOUT a login (Google's OAuth branding requires
   // publicly reachable privacy policy + terms): direct links and logged-out
   // visitors get the real page, never the login wall.
@@ -68,6 +70,21 @@
     void checkInstall();
     // The first-visit About modal must never cover a public legal page.
     if (!isPublicPage) maybeAutoOpenAbout();
+    // Version poll: detect missed iOS SW updates. Runs after paint so it
+    // never delays first render. If a new deploy is found, the waiting SW
+    // activates and the controllerchange listener in main.ts reloads once.
+    if (navigator.onLine) {
+      fetch('/version.txt', { cache: 'no-store' })
+        .then((r) => r.ok ? r.text() : null)
+        .then((serverHash) => {
+          if (serverHash && serverHash.trim() !== BUILD_HASH) {
+            navigator.serviceWorker?.getRegistration()?.then((reg) => {
+              if (reg?.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+            });
+          }
+        })
+        .catch(() => {});
+    }
   });
 
   // The reference db is app-level state: load it as soon as we're logged in,

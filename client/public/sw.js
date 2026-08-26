@@ -42,6 +42,12 @@ self.addEventListener('activate', (event) => {
       ])
     )
   );
+  // Navigation preload: start the network request in parallel with SW boot-up.
+  // Without this, the browser waits for the worker thread to evaluate before
+  // even dispatching the fetch event — 50-500ms wasted on every cold navigation.
+  if (self.registration?.navigationPreload) {
+    event.waitUntil(self.registration.navigationPreload.enable());
+  }
   self.clients.claim();
 });
 
@@ -93,9 +99,6 @@ self.addEventListener('fetch', (event) => {
         let response = await cache.match(request);
         if (!response) response = await cache.match('/index.html');
         if (response) {
-          // Rebuild the Response so the SW returns an opaque-ok navigation
-          // response (Chromium rejects a cached response whose URL doesn't
-          // match the top-level request URL, even for SPA fallback).
           const body = await response.clone().arrayBuffer();
           return new Response(body, {
             status: 200,
@@ -103,20 +106,24 @@ self.addEventListener('fetch', (event) => {
             headers: { 'Content-Type': 'text/html; charset=utf-8' },
           });
         }
-        // Online path: let the network serve it and cache the shell.
+        // Prefer the preloaded response (races SW boot + network in parallel).
+        // Falls back to direct fetch when preload is unavailable or offline.
+        let fresh;
         try {
-          const fresh = await fetch(request);
-          if (fresh.ok) {
-            const base = await caches.open(SHELL_CACHE);
-            if (fresh.url === request.url || request.url.endsWith('/')) {
-              await base.put(request, fresh.clone());
-            }
-            await base.put('/index.html', fresh.clone());
-          }
-          return fresh;
-        } catch {
-          return new Response('Offline', { status: 503 });
+          fresh = await event.preloadResponse;
+        } catch { /* preload unsupported or failed */ }
+        if (!fresh) {
+          try { fresh = await fetch(request); } catch { /* offline */ }
         }
+        if (fresh?.ok) {
+          const base = await caches.open(SHELL_CACHE);
+          if (fresh.url === request.url || request.url.endsWith('/')) {
+            await base.put(request, fresh.clone());
+          }
+          await base.put('/index.html', fresh.clone());
+          return fresh;
+        }
+        return new Response('Offline', { status: 503 });
       })(),
     );
     return;

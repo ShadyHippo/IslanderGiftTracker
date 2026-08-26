@@ -8,10 +8,14 @@ const SHELL_CACHE = 'acnh-shell-' + SW_VERSION;
 const DB_CACHE = 'acnh-db-v3';
 const IMG_CACHE = 'acnh-img-v3';
 
-// Cached SHELL_CACHE handle — opened once per SW lifetime, reused for every
-// navigation.  On iOS, caches.open() is expensive when IMG_CACHE has thousands
-// of entries; caching this handle avoids paying that cost on every navigation.
-let shellCache = null;
+// Cached cache handles — opened once per SW lifetime, reused for every request.
+// On iOS, caches.open() is expensive when IMG_CACHE has thousands of entries;
+// caching handles avoids paying that cost on every navigation and asset fetch.
+const handles = {};
+function getCache(name) {
+  if (!handles[name]) handles[name] = caches.open(name);
+  return handles[name];
+}
 
 // App shell: built assets from Vite + index.html
 
@@ -20,14 +24,13 @@ let shellCache = null;
 // real bytes.
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(SHELL_CACHE).then((cache) => {
-      shellCache = cache;
-      return Promise.all(
+    getCache(SHELL_CACHE).then((cache) =>
+      Promise.all(
         SHELL_ASSETS.map((url) =>
           cache.add(new Request(url, { cache: 'reload' })).catch(() => {})
         )
-      );
-    })
+      )
+    )
   );
   self.skipWaiting();
 });
@@ -42,7 +45,7 @@ self.addEventListener('activate', (event) => {
           .map((k) => caches.delete(k)),
         // Older deploys cached these via the /img/ cache-first rule, serving
         // stale manifests/zips across updates. Purge them on every activation.
-        caches.open(IMG_CACHE).then((cache) =>
+        getCache(IMG_CACHE).then((cache) =>
           Promise.all([cache.delete('/img/manifest.json'), cache.delete('/img/images.zip')])
         ),
       ])
@@ -81,6 +84,12 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Health ping: network-only, never touches Cache Storage.
+  if (url.pathname === '/health') {
+    event.respondWith(networkOnly(request));
+    return;
+  }
+
   // Image manifest + install bundle: network-only, ALWAYS. Cache-first here
   // poisoned updates (stale manifest sizes, stale zips) — these two must
   // reflect the current deploy every single time. Checked BEFORE the /img/
@@ -90,17 +99,17 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // DB files: cache-first (versioned filenames, immutable)
+  // DB files: network-first, write to DB_CACHE on success.
   if (url.pathname.startsWith('/db/')) {
-    event.respondWith(cacheFirst(request));
+    event.respondWith(netFirstWriteCache(request, DB_CACHE));
     return;
   }
 
-  // Images: non-blocking cache-first.  Uses caches.match() (searches all
-  // caches without opening any) so the 4 800-entry IMG_CACHE never blocks
-  // navigation or other requests.
+  // Images: network-first, write to IMG_CACHE on success.  Never calls
+  // caches.match() which scans ALL caches — on iOS with 4 800+ entries
+  // in IMG_CACHE that single call is the dominant cost.
   if (url.pathname.startsWith('/img/')) {
-    event.respondWith(cacheFirst(request));
+    event.respondWith(netFirstWriteCache(request, IMG_CACHE));
     return;
   }
 
@@ -112,21 +121,24 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Hashed build assets are immutable: cache-first once seen.
+  // Hashed build assets are immutable: network-first, write to SHELL_CACHE.
   if (url.pathname.startsWith('/assets/')) {
-    event.respondWith(cacheFirst(request));
+    event.respondWith(netFirstWriteCache(request, SHELL_CACHE));
     return;
   }
 
-  // App shell assets (js/css): stale-while-revalidate
-  event.respondWith(staleWhileRevalidate(request));
+  // Everything else: network-only. No cache lookup, no cache write.
+  // This is the critical change: the old stale-while-revalidate opened
+  // caches.match() on EVERY unmatched request, which on iOS with a large
+  // IMG_CACHE added hundreds of ms to health pings, manifest checks, etc.
+  event.respondWith(networkOnly(request));
 });
 
-// Navigate handler — uses the cached SHELL_CACHE handle (opened once in
-// install) so we never call caches.open() on the hot path.
+// Navigate handler — uses the cached SHELL_CACHE handle so we never call
+// caches.open() on the hot path.
 async function navigateFetch(event) {
   const { request } = event;
-  const cache = shellCache || await caches.open(SHELL_CACHE);
+  const cache = await getCache(SHELL_CACHE);
   let response = await cache.match(request);
   if (!response) response = await cache.match('/index.html');
   if (response) {
@@ -156,24 +168,23 @@ async function navigateFetch(event) {
   return new Response('Offline', { status: 503 });
 }
 
-// cache-first: reads via caches.match() (no open), only opens for writes.
-async function cacheFirst(request) {
-  const cached = await caches.match(request);
-  if (cached) return cached;
+// network-first with cache write: fetches from network, writes to the
+// specified cache on success.  Falls back to the cache only when offline.
+// Never calls caches.match() — the cache is only opened via getCache()
+// (which returns a cached handle after the first call).
+async function netFirstWriteCache(request, cacheName) {
   try {
     const response = await fetch(request);
     if (response.ok) {
-      // Determine which cache this URL belongs to and write there.
-      const url = new URL(request.url);
-      const cacheName = url.pathname.startsWith('/img/') ? IMG_CACHE
-        : url.pathname.startsWith('/db/') ? DB_CACHE
-        : SHELL_CACHE;
-      const cache = await caches.open(cacheName);
+      const cache = await getCache(cacheName);
       cache.put(request, response.clone());
     }
     return response;
   } catch {
-    return new Response('Offline', { status: 503 });
+    // Offline: try the specific cache directly (no caches.match scan).
+    const cache = await getCache(cacheName);
+    const cached = await cache.match(request);
+    return cached || new Response('Offline', { status: 503 });
   }
 }
 
@@ -188,35 +199,6 @@ async function networkOnly(request) {
   }
 }
 
-async function networkFirst(request) {
-  try {
-    const response = await fetch(request);
-    return response;
-  } catch {
-    const cached = await caches.match(request);
-    return cached || new Response('Offline', { status: 503 });
-  }
-}
-
-// stale-while-revalidate: reads via caches.match(), opens only for writes.
-async function staleWhileRevalidate(request) {
-  const cached = await caches.match(request);
-  const fetchPromise = fetch(request)
-    .then(async (response) => {
-      if (response.ok) {
-        const url = new URL(request.url);
-        const cacheName = url.pathname.startsWith('/img/') ? IMG_CACHE
-          : url.pathname.startsWith('/db/') ? DB_CACHE
-          : SHELL_CACHE;
-        const cache = await caches.open(cacheName);
-        cache.put(request, response.clone());
-      }
-      return response;
-    })
-    .catch(() => cached);
-  return cached || fetchPromise;
-}
-
 // Message handler: pre-cache images + on-demand skipWaiting (for update flow)
 self.addEventListener('message', (event) => {
   if (event.data?.type === 'CACHE_IMAGES') {
@@ -228,7 +210,7 @@ self.addEventListener('message', (event) => {
 });
 
 async function cacheImages(urls, source) {
-  const cache = await caches.open(IMG_CACHE);
+  const cache = await getCache(IMG_CACHE);
   const total = urls.length;
   let done = 0;
   const BATCH = 20;

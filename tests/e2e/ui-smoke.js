@@ -69,15 +69,16 @@ try {
   const count = await page.textContent('header p');
   console.log('villager count line:', count?.trim());
 
-  // Villager icons render (served from /img, cached offline after install)
+  // Villager icons render (from IndexedDB via blob: URLs, not /img/ — images
+  // no longer go through the service worker / Cache Storage)
   await page.waitForSelector('li img', { timeout: 10000 });
   const imgSrc = await page.getAttribute('li img', 'src');
   console.log('first villager img src:', imgSrc?.slice(0, 40));
-  if (!imgSrc || !imgSrc.startsWith('/img/')) {
-    console.error('FAIL: villager icons not rendering (expected /img/ URLs)');
+  if (!imgSrc || !imgSrc.startsWith('blob:')) {
+    console.error('FAIL: villager icons not rendering (expected blob: URLs from IndexedDB)');
     process.exit(1);
   }
-  console.log('PASS: villager icons render');
+  console.log('PASS: villager icons render (blob: from IndexedDB)');
 
   // Villager flags: favorite + on-island toggles, list filters, and the filters
   // clear the search text (so the narrowed list is immediately visible)
@@ -224,17 +225,32 @@ try {
   await waitSaved();
   console.log('PASS: gift log round-trips (undo + autosave)');
 
-  // Their house: interior/exterior photos, exact-color items, and Buy: lines
+  // Their house: interior/exterior photos, exact-color items, and Buy: lines.
+  // Images are lazy (IntersectionObserver): scroll the section into view to
+  // trigger resolution, then expect blob: URLs from IndexedDB.
+  const houseSection = page.locator('section:has-text("Their house")');
+  await houseSection.scrollIntoViewIfNeeded();
+  await houseSection.waitFor({
+    state: 'attached',
+    timeout: 5000,
+  });
   await page.waitForSelector('section:has-text("Their house") img[alt^="Inside"]', { timeout: 15000 });
   await page.waitForSelector('section:has-text("Their house") img[alt^="Outside"]', { timeout: 5000 });
+  const housePhotoSrc = await page.getAttribute('section:has-text("Their house") img[alt^="Inside"]', 'src');
+  if (!housePhotoSrc || !housePhotoSrc.startsWith('blob:')) {
+    console.error(`FAIL: house photo should be a blob: URL from IndexedDB, got ${housePhotoSrc?.slice(0, 40)}`);
+    process.exit(1);
+  }
   const houseItems = await page.locator('section:has-text("Their house") li').count();
   if (houseItems === 0) {
     console.error('FAIL: no house items rendered');
     process.exit(1);
   }
-  const houseThumbs = await page.locator('section:has-text("Their house") li img[src^="/img/"]').count();
+  // Every house item must carry an exact image path (the data pipeline check);
+  // each LazyImage exposes it via data-path on the wrapper span.
+  const houseThumbs = await page.locator('section:has-text("Their house") li span[data-path^="/img/"]').count();
   if (houseThumbs !== houseItems) {
-    console.error(`FAIL: all ${houseItems} house items should render exact thumbnails, got ${houseThumbs}`);
+    console.error(`FAIL: all ${houseItems} house items should have exact thumbnails, got ${houseThumbs}`);
     process.exit(1);
   }
   const buyLine = await page.locator('p:has-text("Buy:")').count();

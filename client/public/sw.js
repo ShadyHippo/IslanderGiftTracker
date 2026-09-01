@@ -6,11 +6,14 @@ const SHELL_ASSETS = __SHELL_ASSETS__;
 // the previous one together with its stale asset generation.
 const SHELL_CACHE = 'acnh-shell-' + SW_VERSION;
 const DB_CACHE = 'acnh-db-v3';
-const IMG_CACHE = 'acnh-img-v3';
+// Images no longer live in Cache Storage at all — they're in IndexedDB and
+// served via blob URLs in page code (see imagedb.ts). A large image cache in
+// Cache Storage was the cause of slow cold boots: on iOS the first
+// caches.open() opens EVERY cache for the origin (reading all ~25k image
+// record metadata files) before the navigation could be served. The old
+// 'acnh-img-v3' cache is deleted by the activate() purge below.
 
 // Cached cache handles — opened once per SW lifetime, reused for every request.
-// On iOS, caches.open() is expensive when IMG_CACHE has thousands of entries;
-// caching handles avoids paying that cost on every navigation and asset fetch.
 const handles = {};
 function getCache(name) {
   if (!handles[name]) handles[name] = caches.open(name);
@@ -35,21 +38,15 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
-// Activate: clean old caches + purge entries that must never be cached
+// Activate: clean old caches. Only the shell and db caches survive; the old
+// image cache ('acnh-img-v3') and any stale shell generations are deleted.
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all([
-        ...keys
-          .filter((k) => k !== SHELL_CACHE && k !== DB_CACHE && k !== IMG_CACHE)
-          .map((k) => caches.delete(k)),
-        // Older deploys cached these via the /img/ cache-first rule, serving
-        // stale manifests/zips across updates. Purge them on every activation.
-        getCache(IMG_CACHE).then((cache) =>
-          Promise.all([cache.delete('/img/manifest.json'), cache.delete('/img/images.zip')])
-        ),
-      ])
-    )
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(keys.filter((k) => k !== SHELL_CACHE && k !== DB_CACHE).map((k) => caches.delete(k)))
+      )
   );
   // Navigation preload: start the network request in parallel with SW boot-up.
   // Without this, the browser waits for the worker thread to evaluate before
@@ -90,28 +87,18 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Image manifest + install bundle: network-only, ALWAYS. Cache-first here
-  // poisoned updates (stale manifest sizes, stale zips) — these two must
-  // reflect the current deploy every single time. Checked BEFORE the /img/
-  // catch-all below.
-  if (url.pathname === '/img/manifest.json' || url.pathname === '/img/images.zip') {
-    event.respondWith(networkOnly(request));
-    return;
-  }
-
   // DB files: network-first, write to DB_CACHE on success.
   if (url.pathname.startsWith('/db/')) {
     event.respondWith(netFirstWriteCache(request, DB_CACHE));
     return;
   }
 
-  // Images: network-first, write to IMG_CACHE on success.  Never calls
-  // caches.match() which scans ALL caches — on iOS with 4 800+ entries
-  // in IMG_CACHE that single call is the dominant cost.
-  if (url.pathname.startsWith('/img/')) {
-    event.respondWith(netFirstWriteCache(request, IMG_CACHE));
-    return;
-  }
+  // Images ('/img/*') are deliberately NOT handled here. They are served from
+  // IndexedDB via blob URLs in page code (imagedb.ts / LazyImage.svelte);
+  // online misses are fetched in page code and cached into IDB. Routing them
+  // through the SW put every viewed image into a giant Cache Storage cache on
+  // the boot path — the source of the slow iOS cold start. They fall through
+  // to networkOnly below.
 
   // SPA navigation (deep links like /villager/ace): always serve the cached
   // shell so the app loads offline from any route, not just '/'. Fall back to
@@ -127,10 +114,10 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Everything else: network-only. No cache lookup, no cache write.
-  // This is the critical change: the old stale-while-revalidate opened
-  // caches.match() on EVERY unmatched request, which on iOS with a large
-  // IMG_CACHE added hundreds of ms to health pings, manifest checks, etc.
+  // Everything else: network-only. No cache lookup, no cache write. The old
+  // stale-while-revalidate opened caches.match() on EVERY unmatched request,
+  // which on iOS with a large image cache added hundreds of ms to health
+  // pings, manifest checks, etc.
   event.respondWith(networkOnly(request));
 });
 
@@ -199,44 +186,11 @@ async function networkOnly(request) {
   }
 }
 
-// Message handler: pre-cache images + on-demand skipWaiting (for update flow)
+// Message handler: on-demand skipWaiting (for the update flow). Image
+// pre-caching used to live here (CACHE_IMAGES) but moved to IndexedDB — see
+// imagedb.ts.
 self.addEventListener('message', (event) => {
-  if (event.data?.type === 'CACHE_IMAGES') {
-    const { urls } = event.data;
-    event.waitUntil(cacheImages(urls, event.source));
-  } else if (event.data?.type === 'SKIP_WAITING') {
+  if (event.data?.type === 'SKIP_WAITING') {
     self.skipWaiting();
   }
 });
-
-async function cacheImages(urls, source) {
-  const cache = await getCache(IMG_CACHE);
-  const total = urls.length;
-  let done = 0;
-  const BATCH = 20;
-
-  for (let i = 0; i < total; i += BATCH) {
-    const batch = urls.slice(i, i + BATCH);
-    await Promise.all(
-      batch.map(async (url) => {
-        try {
-          const response = await fetch(url);
-          if (response.ok) {
-            await cache.put(url, response);
-          }
-        } catch {
-          // skip failed images
-        }
-        done++;
-      })
-    );
-    // Report progress to client
-    if (source) {
-      source.postMessage({ type: 'IMAGE_PROGRESS', done, total });
-    }
-  }
-
-  if (source) {
-    source.postMessage({ type: 'IMAGE_COMPLETE', total });
-  }
-}

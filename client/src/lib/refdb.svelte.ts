@@ -37,7 +37,7 @@ export function getRefDbState() {
 const IDB_NAME = 'acnh';
 const IDB_STORE = 'refdb';
 const IDB_KEY = 'current';
-const IDB_VERSION = 2;
+const IDB_VERSION = 3;
 
 export function openIdb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -47,6 +47,10 @@ export function openIdb(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains('refdb')) db.createObjectStore('refdb');
       if (!db.objectStoreNames.contains('progress')) db.createObjectStore('progress');
       if (!db.objectStoreNames.contains('imgcache')) db.createObjectStore('imgcache');
+      // 'imgs' holds the actual image bytes ({buf, type} per path). It lives
+      // in IndexedDB — not Cache Storage — so the ~25k images are never opened
+      // on the service worker navigation path (the cause of slow iOS boots).
+      if (!db.objectStoreNames.contains('imgs')) db.createObjectStore('imgs');
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error ?? new Error('indexeddb open failed'));

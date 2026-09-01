@@ -38,6 +38,7 @@
   import { p } from './router';
   import { createDebouncedQuery } from './search.svelte';
   import { getInstallState, runInstall } from './install.svelte';
+  import LazyImage from './LazyImage.svelte';
   import { getNet } from './net.svelte';
 
   const refdb = getRefDbState();
@@ -281,12 +282,12 @@
                 class="flex min-w-0 flex-1 items-center gap-3"
               >
                 {#if imgFor(v.name)}
-                  <img
-                    src={imgFor(v.name)!}
+                  <LazyImage
+                    path={imgFor(v.name)}
                     alt={v.name}
-                    class="h-12 w-12 shrink-0 rounded-full object-cover"
-                    loading="lazy"
-                    decoding="async"
+                    class="h-12 w-12 shrink-0 rounded-full"
+                    placeholder={v.name.charAt(0).toUpperCase()}
+                    placeholderClass="text-lg font-bold text-white {avatarClass(v.name)}"
                   />
                 {:else}
                   <span

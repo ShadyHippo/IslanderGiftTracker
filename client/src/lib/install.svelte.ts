@@ -1,15 +1,19 @@
 import { getRefDbState, loadReferenceDb, openIdb } from './refdb.svelte';
+import { putMany, requestPersistentStorage } from './imagedb';
 import { Unzip, AsyncUnzipInflate, type UnzipFile } from 'fflate';
 
 // Image bundle install: download the db + one stored zip of every webp image,
-// extract into Cache Storage, and mark the device as installed. Offered on the
+// extract into IndexedDB, and mark the device as installed. Offered on the
 // login screen (with a hint to add the app to the home screen first); never
 // gates the app — declining just means images cache lazily as they're viewed.
+//
+// Images go to IndexedDB (not Cache Storage) on purpose: a ~25k-entry Cache
+// Storage cache is opened wholesale by WebKit on the first caches.open() of
+// every cold start, which made PWA boot slow. IDB does indexed point lookups
+// and is never touched by the service worker's navigation path.
 
 const IMG_IDB_STORE = 'imgcache';
 const IMG_IDB_KEY = 'hash';
-// Must match CACHE_NAME for images in client/public/sw.js.
-const IMG_CACHE = 'acnh-img-v3';
 
 interface InstallState {
   phase: 'checking' | 'idle' | 'installing';
@@ -155,24 +159,43 @@ export async function runInstall(): Promise<void> {
     install.progress = 10;
 
     // 2) Image bundle — STREAMED. Network chunks feed straight into the
-    // unzipper and each image lands in Cache Storage as its bytes arrive, so
-    // peak memory is a few chunks + the largest single image — never the whole
-    // archive. A dropped connection resumes via HTTP Range (the server supports
-    // it) instead of restarting the ~200 MB download from byte zero.
-    if (!('caches' in window)) throw new Error('offline storage is unavailable in this browser');
-    const cache = await caches.open(IMG_CACHE);
+    // unzipper and each image lands in IndexedDB as its bytes arrive, so peak
+    // memory is a few chunks + one flush batch — never the whole archive. A
+    // dropped connection resumes via HTTP Range (the server supports it)
+    // instead of restarting the ~200 MB download from byte zero.
+    if (!('indexedDB' in window)) throw new Error('offline storage is unavailable in this browser');
 
     install.detail = 'Downloading images…';
     let entriesFound = 0;
-    let entriesDone = 0;
+    let entriesStored = 0;
     let entriesFailed = 0;
-    // Writes are chained so only one cache.put runs at a time.
+    // Writes are chained and flushed in batches: one IDB transaction per file
+    // would be ~25k transactions; batching keeps memory AND transaction count
+    // bounded (a batch of small webps is only a few MB).
     let putChain: Promise<void> = Promise.resolve();
+    let pending: { path: string; buf: ArrayBuffer; type: string }[] = [];
+    const flush = () => {
+      if (!pending.length) return;
+      const batch = pending;
+      pending = [];
+      putChain = putChain.then(async () => {
+        entriesFailed += await putMany(batch);
+        entriesStored += batch.length;
+        // Extraction phase (after the stream ends): 80%..97% follows the
+        // stored-file count so the bar keeps moving while trailing writes drain.
+        if (streamEnded && entriesFound > 0) {
+          install.progress = Math.min(
+            97,
+            80 + 17 * (entriesStored / entriesFound),
+          );
+        }
+      });
+    };
     // Progress is single-writer per phase: while the stream is reading, the
     // byte-based download formula owns the bar. Only after the stream ends do
-    // completed-file counts take over. Both formulas firing at once used to
+    // stored-file counts take over. Both formulas firing at once used to
     // make the bar visibly flash between download % and the 97% extraction
-    // cap, because cache.puts complete while chunks are still arriving.
+    // cap, because puts complete while chunks are still arriving.
     let streamEnded = false;
 
     const onFile = (file: UnzipFile) => {
@@ -187,26 +210,8 @@ export async function runInstall(): Promise<void> {
         if (final) {
           const out = concatChunks(chunks);
           chunks.length = 0;
-          const name = file.name;
-          putChain = putChain.then(async () => {
-            try {
-              await cache.put('/img/' + name, new Response(out.buffer as ArrayBuffer, {
-                headers: { 'Content-Type': 'image/webp' },
-              }));
-            } catch {
-              entriesFailed++;
-            }
-            entriesDone++;
-            // Extraction phase (after the stream ends): 80%..97% follows the
-            // stored-file count so the bar keeps moving while trailing
-            // cache.puts drain.
-            if (streamEnded && entriesFound > 0) {
-              install.progress = Math.min(
-                97,
-                80 + 17 * (entriesDone / entriesFound),
-              );
-            }
-          });
+          pending.push({ path: '/img/' + file.name, buf: out.buffer as ArrayBuffer, type: 'image/webp' });
+          if (pending.length >= 200) flush();
         }
       };
       file.start();
@@ -266,9 +271,10 @@ export async function runInstall(): Promise<void> {
       }
     }
 
-    await putChain; // flush trailing writes
+    flush(); // trailing partial batch
+    await putChain;
     // A meaningful number of failures means device storage gave out mid-install
-    // — that must NEVER masquerade as success (it leaves a half-empty cache).
+    // — that must NEVER masquerade as success (it leaves a half-empty store).
     if (entriesFailed >= Math.max(5, Math.ceil(entriesFound * 0.001))) {
       throw new Error(
         `${entriesFailed} of ${entriesFound} images could not be stored — ` +
@@ -277,10 +283,9 @@ export async function runInstall(): Promise<void> {
     }
     install.progress = 98;
 
-    // Purge side-effect copies an older service worker may have made (the zip
-    // is ~200 MB of dead weight, and a stale manifest poisons future updates).
-    await cache.delete('/img/images.zip');
-    await cache.delete('/img/manifest.json');
+    // Ask the browser not to evict the bundle under storage pressure — this is
+    // the data that makes airplane mode work.
+    await requestPersistentStorage();
 
     // 4) Mark installed
     if (!currentHash) {

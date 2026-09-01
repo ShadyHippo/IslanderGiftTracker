@@ -22,6 +22,7 @@
     type VillagerFlags,
   } from './progress.svelte';
   import ConnectionStatus from './ConnectionStatus.svelte';
+  import LazyImage from './LazyImage.svelte';
   import { route, navigate } from './router';
   import { createDebouncedQuery } from './search.svelte';
 
@@ -209,7 +210,13 @@
            fold, forcing a scroll before any real content. -->
       <section class="flex items-center gap-3 rounded-xl border border-green-200 bg-white p-3">
         {#if imgUrl}
-          <img src={imgUrl} alt={name} class="h-16 w-16 rounded-full object-cover" />
+          <LazyImage
+            path={imgUrl}
+            alt={name}
+            class="h-16 w-16 rounded-full"
+            placeholder={name.charAt(0).toUpperCase()}
+            placeholderClass="bg-green-600 text-xl font-bold text-white"
+          />
         {:else}
           <span class="flex h-16 w-16 items-center justify-center rounded-full bg-green-600 text-xl font-bold text-white">
             {name.charAt(0).toUpperCase()}
@@ -288,12 +295,11 @@
                   {@const isGifted = gifted.has(idea.name)}
                   <li class="flex items-start gap-3 px-4 py-2.5 transition-opacity {isGifted ? 'opacity-60' : ''}">
                     {#if thumbFor(group.key, idea)}
-                      <img
-                        src={thumbFor(group.key, idea)!}
+                      <LazyImage
+                        path={thumbFor(group.key, idea)}
                         alt={idea.name}
-                        class="h-12 w-12 shrink-0 rounded-lg object-cover"
-                        loading="lazy"
-                        decoding="async"
+                        class="h-12 w-12 shrink-0 rounded-lg"
+                        placeholder={idea.name.charAt(0).toUpperCase()}
                       />
                     {:else}
                       <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-green-100 text-green-600">
@@ -364,19 +370,17 @@
         <section class="rounded-xl border border-green-200 bg-white p-5">
           <h2 class="mb-3 font-semibold text-green-900">Their house</h2>
           {#if housePhotoUrl('interior')}
-            <img
-              src={housePhotoUrl('interior')!}
+            <LazyImage
+              path={housePhotoUrl('interior')}
               alt="Inside {villager.name}'s house"
-              class="mb-3 w-full rounded-lg object-cover"
-              loading="lazy"
+              class="mb-3 w-full rounded-lg"
             />
           {/if}
           {#if housePhotoUrl('exterior')}
-            <img
-              src={housePhotoUrl('exterior')!}
+            <LazyImage
+              path={housePhotoUrl('exterior')}
               alt="Outside {villager.name}'s house"
-              class="mb-3 w-full rounded-lg object-cover"
-              loading="lazy"
+              class="mb-3 w-full rounded-lg"
             />
           {/if}
           <details class="group mt-3 rounded-xl border border-green-200">
@@ -392,11 +396,11 @@
                 {@const img = houseImgUrl(item.name)}
                 <li class="flex items-start gap-3 px-4 py-2.5">
                   {#if img}
-                    <img
-                      src={img}
+                    <LazyImage
+                      path={img}
                       alt={item.name}
-                      class="h-12 w-12 shrink-0 rounded-lg object-cover"
-                      loading="lazy"
+                      class="h-12 w-12 shrink-0 rounded-lg"
+                      placeholder={item.name.charAt(0).toUpperCase()}
                     />
                   {:else}
                     <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-green-100 text-green-600">

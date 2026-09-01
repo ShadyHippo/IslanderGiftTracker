@@ -14,9 +14,14 @@ server-build:
 
 # Client — node/pnpm run ONLY inside containers (host stays clean).
 # $$(...) = expanded by the shell at runtime; $(...) would be eaten by make.
+# PATH is pinned to the node:24-alpine default (NOT $$PATH): `$PATH` inside the
+# inner sh -c would be expanded by the HOST shell (double-quoted), leaking the
+# host PATH into the container. On NixOS the host PATH lacks /usr/local/bin
+# (where node lives), breaking the build. Explicitly setting the container PATH
+# makes client-build/client-dev work on any host.
 CLIENT_MOUNTS = -u "$$(id -u):$$(id -g)" -e HOME=/tmp -e COREPACK_ENABLE_DOWNLOAD_PROMPT=0 -e GIT_HASH="$$(git rev-parse --short HEAD 2>/dev/null || echo dev)" \
 	-v "$$PWD/client/.pnpm-store:/tmp/.local/share/pnpm" -v "$$PWD/client:/client" -w /client
-CLIENT = docker run --rm $(CLIENT_MOUNTS) node:24-alpine sh -c "mkdir -p /tmp/pnpm && npm install -g --prefix /tmp/pnpm --no-fund --no-audit pnpm@11.21.0 >/dev/null 2>&1; export PATH=/tmp/pnpm/bin:$$PATH; pnpm --version;
+CLIENT = docker run --rm $(CLIENT_MOUNTS) node:24-alpine sh -c "mkdir -p /tmp/pnpm && npm install -g --prefix /tmp/pnpm --no-fund --no-audit pnpm@11.21.0 >/dev/null 2>&1; export PATH=/tmp/pnpm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; pnpm --version;
 
 # Docker auto-creates missing host bind dirs as root; force our ownership.
 client-dirs:
@@ -40,7 +45,7 @@ client-check: client-dirs
 
 # Dev server with hot reload (--network host: /api + /db proxy to the Go server on :8080)
 client-dev: client-dirs
-	docker run --rm --network host $(CLIENT_MOUNTS) node:24-alpine sh -c "mkdir -p /tmp/pnpm && npm install -g --prefix /tmp/pnpm --no-fund --no-audit pnpm@11.21.0 >/dev/null 2>&1; export PATH=/tmp/pnpm/bin:$$PATH; pnpm --version; pnpm install --frozen-lockfile && pnpm dev"
+	docker run --rm --network host $(CLIENT_MOUNTS) node:24-alpine sh -c "mkdir -p /tmp/pnpm && npm install -g --prefix /tmp/pnpm --no-fund --no-audit pnpm@11.21.0 >/dev/null 2>&1; export PATH=/tmp/pnpm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; pnpm --version; pnpm install --frozen-lockfile && pnpm dev"
 
 # Docker image for deployment
 docker:

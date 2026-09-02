@@ -11,7 +11,7 @@
  */
 const KEY = '@theme';
 const LIGHT_THEME_COLOR = '#166534';
-const DARK_THEME_COLOR = '#052e16';
+const DARK_THEME_COLOR = '#000000';
 
 function readOverride(): 'light' | 'dark' | null {
   try {
@@ -23,14 +23,23 @@ function readOverride(): 'light' | 'dark' | null {
 
 const mql = window.matchMedia('(prefers-color-scheme: dark)');
 
-/** What the user has explicitly chosen, or null to keep following the OS. */
-const override = $state<{ value: 'light' | 'dark' | null }>({ value: readOverride() });
-let systemDark = $state(mql.matches);
+/**
+ * Live state object (returned by reference, like net.svelte.ts): `override`
+ * is what the user explicitly chose or null to keep following the OS;
+ * `systemDark` tracks prefers-color-scheme while no override is set.
+ * Components compute their own derived from these.
+ */
+const theme = $state<{ override: 'light' | 'dark' | null; systemDark: boolean }>({
+  override: readOverride(),
+  systemDark: mql.matches,
+});
 
-const effective = $derived(override.value ?? (systemDark ? 'dark' : 'light'));
+export function getTheme() {
+  return theme;
+}
 
 function sync() {
-  const dark = effective === 'dark';
+  const dark = theme.override === 'dark' || (theme.override === null && theme.systemDark);
   document.documentElement.classList.toggle('dark', dark);
   // Native controls (scrollbars, form fields) should follow the override too,
   // not just the OS.
@@ -45,19 +54,16 @@ function sync() {
 sync();
 
 mql.addEventListener('change', (e) => {
-  systemDark = e.matches;
+  theme.systemDark = e.matches;
   sync();
 });
 
-export function getTheme() {
-  return { override: override.value, effective };
-}
-
 /** Flip light/dark; the explicit choice is remembered on this device. */
 export function toggleTheme() {
-  override.value = effective === 'dark' ? 'light' : 'dark';
+  const dark = theme.override === 'dark' || (theme.override === null && theme.systemDark);
+  theme.override = dark ? 'light' : 'dark';
   try {
-    localStorage.setItem(KEY, override.value);
+    localStorage.setItem(KEY, theme.override);
   } catch {}
   sync();
 }

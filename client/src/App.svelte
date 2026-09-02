@@ -151,7 +151,7 @@
     both are local/fast when cached, and the caps above guarantee this never
     outstays its welcome.
   -->
-  <div class="fixed inset-0 z-[90] flex flex-col items-center justify-center gap-4 bg-green-50 dark:bg-green-950" style="padding-top: env(safe-area-inset-top, 0px)">
+  <div class="fixed inset-0 z-[90] flex flex-col items-center justify-center gap-4 bg-green-50 dark:bg-black" style="padding-top: env(safe-area-inset-top, 0px)">
     <span class="h-10 w-10 animate-spin rounded-full border-4 border-green-200 border-t-green-700 dark:border-green-700 dark:border-t-green-400"></span>
     <p class="text-sm font-medium text-green-700 dark:text-green-300">Getting your island ready…</p>
   </div>
@@ -191,7 +191,7 @@
   <!-- Full-screen takeover: blocks browsing so lazy loads don't compete with
        the bundle download on the server's uplink. Overlays (not replaces)
        whatever is underneath, keeping the login form state intact. -->
-  <div class="fixed inset-0 z-[60] flex items-center justify-center bg-green-50/95 p-6 backdrop-blur-sm dark:bg-green-950/95">
+  <div class="fixed inset-0 z-[60] flex items-center justify-center bg-green-50/95 p-6 backdrop-blur-sm dark:bg-black/95">
     <div class="w-full max-w-sm">
       <p class="mb-3 text-center text-sm font-medium text-green-800 dark:text-green-100">{install.detail}</p>
       <div class="h-3 w-full overflow-hidden rounded-full bg-green-100 dark:bg-green-800">

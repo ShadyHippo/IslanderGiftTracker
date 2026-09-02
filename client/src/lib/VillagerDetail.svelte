@@ -162,11 +162,11 @@
 
 </script>
 
-<div class="min-h-screen bg-green-50 dark:bg-green-950">
-  <header class="sticky top-0 z-10 flex items-center gap-2 border-b border-green-200 bg-white/95 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur dark:border-green-800 dark:bg-green-900/95">
+<div class="min-h-screen bg-green-50 dark:bg-black">
+  <header class="sticky top-0 z-10 flex items-center gap-2 border-b border-green-200 bg-white/95 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur dark:border-green-800 dark:bg-green-950/95">
     <button
       onclick={goBack}
-      class="rounded-lg border border-green-300 bg-white px-3 py-1.5 text-sm text-green-800 hover:bg-green-100 dark:border-green-700 dark:bg-green-900 dark:text-green-100 dark:hover:bg-green-800"
+      class="rounded-lg border border-green-300 bg-white px-3 py-1.5 text-sm text-green-800 hover:bg-green-100 dark:border-green-700 dark:bg-green-950 dark:text-green-100 dark:hover:bg-green-800"
     >
       ← Back
     </button>
@@ -208,7 +208,7 @@
     {:else}
       <!-- Compact hero: the old p-5 + 96px avatar pushed every card below the
            fold, forcing a scroll before any real content. -->
-      <section class="flex items-center gap-3 rounded-xl border border-green-200 bg-white p-3 dark:border-green-800 dark:bg-green-900">
+      <section class="flex items-center gap-3 rounded-xl border border-green-200 bg-white p-3 dark:border-green-800 dark:bg-green-950">
         {#if imgUrl}
           <LazyImage
             path={imgUrl}
@@ -231,7 +231,7 @@
         </div>
       </section>
 
-      <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-900">
+      <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-950">
         <h2 class="mb-3 font-semibold text-green-900 dark:text-green-50 dark:text-green-50">About</h2>
         <dl class="space-y-2">
           {#if villager.birthday}
@@ -250,7 +250,7 @@
       </section>
 
       {#if likes.length}
-        <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-900">
+        <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-950">
           <h2 class="mb-3 font-semibold text-green-900 dark:text-green-50 dark:text-green-50">Likes</h2>
           <dl class="space-y-2">
             {#each likes as like}
@@ -263,7 +263,7 @@
         </section>
       {/if}
 
-      <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-900">
+      <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-950">
         <h2 class="mb-1 font-semibold text-green-900 dark:text-green-50 dark:text-green-50">Gift ideas</h2>
         <p class="mb-3 text-xs text-green-700 dark:text-green-300">
           Matched against their favorite colors &amp; styles.
@@ -367,7 +367,7 @@
       </section>
 
       {#if house.size > 0}
-        <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-900">
+        <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-950">
           <h2 class="mb-3 font-semibold text-green-900 dark:text-green-50 dark:text-green-50">Their house</h2>
           {#if housePhotoUrl('interior')}
             <LazyImage

@@ -2,11 +2,11 @@
   import { navigate } from './router';
 </script>
 
-<div class="min-h-screen bg-green-50 dark:bg-green-950">
-  <header class="sticky top-0 z-10 border-b border-green-200 bg-white/95 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur dark:border-green-800 dark:bg-green-900/95">
+<div class="min-h-screen bg-green-50 dark:bg-black">
+  <header class="sticky top-0 z-10 border-b border-green-200 bg-white/95 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur dark:border-green-800 dark:bg-green-950/95">
     <button
       onclick={() => void navigate('/')}
-      class="rounded-lg border border-green-300 bg-white px-3 py-1.5 text-sm text-green-800 hover:bg-green-100 dark:border-green-700 dark:bg-green-900 dark:text-green-100 dark:hover:bg-green-800"
+      class="rounded-lg border border-green-300 bg-white px-3 py-1.5 text-sm text-green-800 hover:bg-green-100 dark:border-green-700 dark:bg-green-950 dark:text-green-100 dark:hover:bg-green-800"
     >
       ← Back
     </button>
@@ -16,7 +16,7 @@
     <h1 class="text-2xl font-bold text-green-800 dark:text-green-100">Privacy policy</h1>
     <p class="text-xs text-green-600 dark:text-green-400">Last updated: August 2026</p>
 
-    <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-900">
+    <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-950">
       <h2 class="mb-2 font-semibold text-green-900 dark:text-green-50">What we store</h2>
       <ul class="list-disc space-y-1 pl-5 text-sm leading-relaxed text-green-700 dark:text-green-300">
         <li>Your <strong>account</strong>: a name plus either a password hash (never stored in readable form) or your Google account identity — an opaque ID and your email address, depending on how this instance is set up.</li>
@@ -25,7 +25,7 @@
       </ul>
     </section>
 
-    <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-900">
+    <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-950">
       <h2 class="mb-2 font-semibold text-green-900 dark:text-green-50">What we don't do</h2>
       <ul class="list-disc space-y-1 pl-5 text-sm leading-relaxed text-green-700 dark:text-green-300">
         <li>No analytics, ads, or third-party trackers of any kind.</li>
@@ -34,7 +34,7 @@
       </ul>
     </section>
 
-    <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-900">
+    <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-950">
       <h2 class="mb-2 font-semibold text-green-900 dark:text-green-50">On your device</h2>
       <p class="text-sm leading-relaxed text-green-700 dark:text-green-300">
         To work offline, the app stores its reference data, images, and your
@@ -44,7 +44,7 @@
       </p>
     </section>
 
-    <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-900">
+    <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-950">
       <h2 class="mb-2 font-semibold text-green-900 dark:text-green-50">Deleting your data</h2>
       <p class="text-sm leading-relaxed text-green-700 dark:text-green-300">
         You can download a copy of your gift log anytime from
@@ -62,7 +62,7 @@
       </p>
     </section>
 
-    <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-900">
+    <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-950">
       <h2 class="mb-2 font-semibold text-green-900 dark:text-green-50">Fan project</h2>
       <p class="text-sm leading-relaxed text-green-700 dark:text-green-300">
         This is a non-commercial fan project. Animal Crossing: New Horizons and

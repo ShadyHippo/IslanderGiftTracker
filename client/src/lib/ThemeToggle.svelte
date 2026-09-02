@@ -2,18 +2,20 @@
   import { getTheme, toggleTheme } from './theme.svelte';
 
   // Shows the icon for the theme you'd switch TO (the "go dark"/"go light"
-  // affordance used by most sites' sun/moon toggles).
+  // affordance used by most sites' sun/moon toggles): moon in light mode,
+  // sun in dark mode.
   const theme = getTheme();
+  const effective = $derived(theme.override ?? (theme.systemDark ? 'dark' : 'light'));
 </script>
 
 <button
   type="button"
   onclick={toggleTheme}
-  title={theme.effective === 'dark' ? 'Use light theme' : 'Use dark theme'}
-  aria-label={theme.effective === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
-  class="rounded-lg border border-green-300 bg-white px-3 py-1.5 text-green-800 transition-colors hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-green-200 dark:border-green-700 dark:bg-green-900 dark:text-green-100 dark:hover:bg-green-800"
+  title={effective === 'dark' ? 'Use light theme' : 'Use dark theme'}
+  aria-label={effective === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+  class="rounded-lg border border-green-300 bg-white px-3 py-1.5 text-green-800 transition-colors hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-green-200 dark:border-green-700 dark:bg-green-950 dark:text-green-100 dark:hover:bg-green-800"
 >
-  {#if theme.effective === 'dark'}
+  {#if effective === 'dark'}
     <!-- feather sun -->
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4" aria-hidden="true">
       <circle cx="12" cy="12" r="5" />

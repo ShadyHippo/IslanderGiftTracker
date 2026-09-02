@@ -2,11 +2,11 @@
   import { navigate } from './router';
 </script>
 
-<div class="min-h-screen bg-green-50 dark:bg-green-950">
-  <header class="sticky top-0 z-10 border-b border-green-200 bg-white/95 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur dark:border-green-800 dark:bg-green-900/95">
+<div class="min-h-screen bg-green-50 dark:bg-black">
+  <header class="sticky top-0 z-10 border-b border-green-200 bg-white/95 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur dark:border-green-800 dark:bg-green-950/95">
     <button
       onclick={() => void navigate('/')}
-      class="rounded-lg border border-green-300 bg-white px-3 py-1.5 text-sm text-green-800 hover:bg-green-100 dark:border-green-700 dark:bg-green-900 dark:text-green-100 dark:hover:bg-green-800"
+      class="rounded-lg border border-green-300 bg-white px-3 py-1.5 text-sm text-green-800 hover:bg-green-100 dark:border-green-700 dark:bg-green-950 dark:text-green-100 dark:hover:bg-green-800"
     >
       ← Back
     </button>
@@ -16,7 +16,7 @@
     <h1 class="text-2xl font-bold text-green-800 dark:text-green-100">Terms of Service</h1>
     <p class="text-xs text-green-600 dark:text-green-400">Last updated: August 2026</p>
 
-    <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-900">
+    <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-950">
       <h2 class="mb-2 font-semibold text-green-900 dark:text-green-50">The short version</h2>
       <p class="text-sm leading-relaxed text-green-700 dark:text-green-300">
         This is a free, hobby-run fan tool for tracking Animal Crossing gift
@@ -25,7 +25,7 @@
       </p>
     </section>
 
-    <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-900">
+    <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-950">
       <h2 class="mb-2 font-semibold text-green-900 dark:text-green-50">1. The service</h2>
       <p class="text-sm leading-relaxed text-green-700 dark:text-green-300">
         Islander Gift Tracker matches furniture and clothing items to Animal
@@ -36,7 +36,7 @@
       </p>
     </section>
 
-    <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-900">
+    <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-950">
       <h2 class="mb-2 font-semibold text-green-900 dark:text-green-50">2. Accounts</h2>
       <ul class="list-disc space-y-1 pl-5 text-sm leading-relaxed text-green-700 dark:text-green-300">
         <li>Depending on how this instance is configured, you sign in with a username/password account created for you, or with your Google account (which creates your account automatically on first sign-in).</li>
@@ -45,7 +45,7 @@
       </ul>
     </section>
 
-    <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-900">
+    <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-950">
       <h2 class="mb-2 font-semibold text-green-900 dark:text-green-50">3. Acceptable use</h2>
       <ul class="list-disc space-y-1 pl-5 text-sm leading-relaxed text-green-700 dark:text-green-300">
         <li>Don't automate, scrape, or hammer the service — it runs on a home connection.</li>
@@ -54,7 +54,7 @@
       </ul>
     </section>
 
-    <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-900">
+    <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-950">
       <h2 class="mb-2 font-semibold text-green-900 dark:text-green-50">4. Your data</h2>
       <p class="text-sm leading-relaxed text-green-700 dark:text-green-300">
         Your gift log and tags belong to you. You can export a copy anytime
@@ -69,7 +69,7 @@
       </p>
     </section>
 
-    <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-900">
+    <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-950">
       <h2 class="mb-2 font-semibold text-green-900 dark:text-green-50">5. Availability</h2>
       <p class="text-sm leading-relaxed text-green-700 dark:text-green-300">
         This is a best-effort hobby service. It may be slow, unavailable, or
@@ -78,7 +78,7 @@
       </p>
     </section>
 
-    <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-900">
+    <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-950">
       <h2 class="mb-2 font-semibold text-green-900 dark:text-green-50">6. Intellectual property</h2>
       <p class="text-sm leading-relaxed text-green-700 dark:text-green-300">
         Animal Crossing: New Horizons and all related assets are © Nintendo.
@@ -87,7 +87,7 @@
       </p>
     </section>
 
-    <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-900">
+    <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-950">
       <h2 class="mb-2 font-semibold text-green-900 dark:text-green-50">7. Liability</h2>
       <p class="text-sm leading-relaxed text-green-700 dark:text-green-300">
         To the maximum extent permitted by law, the operator is not liable for
@@ -96,7 +96,7 @@
       </p>
     </section>
 
-    <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-900">
+    <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-950">
       <h2 class="mb-2 font-semibold text-green-900 dark:text-green-50">8. Changes</h2>
       <p class="text-sm leading-relaxed text-green-700 dark:text-green-300">
         These terms may change as the service evolves; material changes will be

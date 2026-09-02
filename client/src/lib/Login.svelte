@@ -74,10 +74,10 @@
   }
 </script>
 
-<div class="flex min-h-screen items-center justify-center bg-green-50 p-6 dark:bg-green-950">
+<div class="flex min-h-screen items-center justify-center bg-green-50 p-6 dark:bg-black">
   <form
     onsubmit={onSubmit}
-    class="w-full max-w-sm rounded-2xl border border-green-200 bg-white p-6 shadow-sm dark:border-green-800 dark:bg-green-900"
+    class="w-full max-w-sm rounded-2xl border border-green-200 bg-white p-6 shadow-sm dark:border-green-800 dark:bg-green-950"
   >
     <h1 class="mb-1 text-2xl font-bold text-green-800 dark:text-green-100">ACNH Gift Tracker</h1>
     <p class="mb-6 text-sm text-green-700 dark:text-green-300">Sign in to your island</p>
@@ -98,7 +98,7 @@
     {:else if cfg.mode === 'google'}
       <a
         href="/api/auth/google/start"
-        class="flex w-full items-center justify-center gap-3 rounded-lg border border-green-300 bg-white px-4 py-3 text-base font-semibold text-green-900 no-underline shadow-sm transition-colors hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-green-300 dark:border-green-700 dark:bg-green-900 dark:text-green-50 dark:hover:bg-green-800/60"
+        class="flex w-full items-center justify-center gap-3 rounded-lg border border-green-300 bg-white px-4 py-3 text-base font-semibold text-green-900 no-underline shadow-sm transition-colors hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-green-300 dark:border-green-700 dark:bg-green-950 dark:text-green-50 dark:hover:bg-green-800/60"
       >
         <svg viewBox="0 0 24 24" class="h-5 w-5" aria-hidden="true">
           <path fill="#4285F4" d="M23.5 12.3c0-.9-.1-1.7-.2-2.5H12v4.8h6.5a5.6 5.6 0 0 1-2.4 3.6v3h3.9c2.3-2.1 3.5-5.2 3.5-8.9z" />
@@ -193,7 +193,7 @@
         <button
           type="button"
           onclick={openAbout}
-          class="rounded-lg border border-green-300 bg-white px-4 py-2.5 text-sm font-semibold text-green-800 transition-colors hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-green-200 dark:border-green-700 dark:bg-green-900 dark:text-green-100 dark:hover:bg-green-800"
+          class="rounded-lg border border-green-300 bg-white px-4 py-2.5 text-sm font-semibold text-green-800 transition-colors hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-green-200 dark:border-green-700 dark:bg-green-950 dark:text-green-100 dark:hover:bg-green-800"
         >
           About
         </button>

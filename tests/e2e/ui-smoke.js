@@ -328,6 +328,37 @@ try {
   }
   console.log('PASS: About popup stays dismissed on reload');
 
+  // Theme switch: defaults to the OS theme (light here) → moon icon; clicking
+  // flips to dark with a sun icon, persists '@theme' in localStorage, and the
+  // choice survives a reload.
+  const lightToggle = page.locator('button[aria-label="Switch to dark theme"]');
+  await lightToggle.waitFor({ state: 'visible', timeout: 5000 });
+  if ((await lightToggle.locator('svg circle').count()) !== 0) {
+    console.error('FAIL: light mode should show a moon icon (no sun circle)');
+    process.exit(1);
+  }
+  await lightToggle.click();
+  await page.waitForFunction(() => document.documentElement.classList.contains('dark'), null, { timeout: 5000 });
+  const darkToggle = page.locator('button[aria-label="Switch to light theme"]');
+  await darkToggle.waitFor({ state: 'visible', timeout: 5000 });
+  if ((await darkToggle.locator('svg circle').count()) !== 1) {
+    console.error('FAIL: dark mode should show a sun icon (sun circle)');
+    process.exit(1);
+  }
+  const storedTheme = await page.evaluate(() => localStorage.getItem('@theme'));
+  if (storedTheme !== 'dark') {
+    console.error(`FAIL: expected localStorage @theme=dark, got ${storedTheme}`);
+    process.exit(1);
+  }
+  await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 });
+  await page.waitForSelector('input[placeholder^="Search by name"]', { timeout: 30000 });
+  if (!(await page.evaluate(() => document.documentElement.classList.contains('dark')))) {
+    console.error('FAIL: dark choice lost on reload');
+    process.exit(1);
+  }
+  await page.locator('button[aria-label="Switch to light theme"]').waitFor({ state: 'visible', timeout: 5000 });
+  console.log('PASS: theme switch moon<->sun + persisted in localStorage');
+
   await page.screenshot({ path: '/e2e/smoke.png', fullPage: false });
   console.log('screenshot -> tests/e2e/smoke.png');
 } catch (e) {

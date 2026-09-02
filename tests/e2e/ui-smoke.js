@@ -80,6 +80,32 @@ try {
   }
   console.log('PASS: villager icons render (blob: from IndexedDB)');
 
+  // About popup: clicking the dimmed background closes it, and the click
+  // must NOT pass through to the controls behind it. (A touch-synthesized
+  // click after the backdrop is removed mid-gesture would toggle a row's
+  // favorite/island state or navigate — snapshot everything, nothing may
+  // change.)
+  const snapshotToggles = () =>
+    page.$$eval('button[aria-label^="Toggle"]', (els) =>
+      els.map((e) => `${e.getAttribute('aria-label')}:${e.getAttribute('aria-pressed')}`).sort().join('|'),
+    );
+  await page.locator('header button:has-text("About")').click();
+  await page.waitForSelector('[data-about-modal]', { timeout: 5000 });
+  const modalBox = await page.locator('[data-about-modal]').boundingBox();
+  const togglesBefore = await snapshotToggles();
+  const urlBefore = page.url();
+  // A point above the dialog, over the list, on the dimmed backdrop.
+  const x = 10;
+  const y = Math.max(80, (modalBox?.top ?? 200) - 30);
+  await page.mouse.click(x, y);
+  await page.waitForSelector('[data-about-modal]', { state: 'detached', timeout: 5000 });
+  const togglesAfter = await snapshotToggles();
+  if (togglesAfter !== togglesBefore || page.url() !== urlBefore) {
+    console.error('FAIL: outside click on About leaked onto the list behind it');
+    process.exit(1);
+  }
+  console.log('PASS: About closes on outside click, nothing behind it was clicked');
+
   // Villager flags: favorite + on-island toggles, list filters, and the filters
   // clear the search text (so the narrowed list is immediately visible)
   const favBtn = page.locator('button[aria-label="Toggle favorite for Ace"]');

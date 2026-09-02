@@ -60,16 +60,39 @@
     if (e.key === 'Escape' && about.open) dismissAbout();
   }
 
-  // Click outside the dialog closes it. Listens on the window instead of the
-  // backdrop so no non-interactive element needs a click handler.
-  function onPointerDown(e: PointerEvent) {
+  // Click outside the dialog closes it.
+  //
+  // The pointerdown handler records — but does NOT act on — whether the
+  // gesture started outside the modal. Closing on pointerdown would unmount
+  // the backdrop mid-gesture, so on touch devices the browser re-hit-tests
+  // the synthesized click at the finger's position and it lands on whatever
+  // was beneath (tapping the dimmed background to close could toggle a
+  // villager's favorite/island state behind the popup). By unmounting only
+  // on the click (backdrop still present when the click's target resolves),
+  // the click can never pass through to content below.
+  //
+  // The flag also stops the same click that OPENS the modal (the header
+  // About button) from immediately closing it: pointerdown ran while the
+  // modal was still closed, so the flag stays false.
+  let gestureStartedOutside = false;
+
+  function onWindowPointerDown(e: PointerEvent) {
+    gestureStartedOutside = false;
+    if (!about.open) return;
+    const modal = document.querySelector('[data-about-modal]');
+    if (modal && !modal.contains(e.target as Node)) gestureStartedOutside = true;
+  }
+
+  function onOutsideClick(e: MouseEvent) {
+    if (!gestureStartedOutside) return;
+    gestureStartedOutside = false;
     if (!about.open) return;
     const modal = document.querySelector('[data-about-modal]');
     if (modal && !modal.contains(e.target as Node)) dismissAbout();
   }
 </script>
 
-<svelte:window onkeydown={onKeydown} onpointerdown={onPointerDown} />
+<svelte:window onkeydown={onKeydown} onpointerdown={onWindowPointerDown} onclick={onOutsideClick} />
 
 {#if about.open}
   <div class="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4">

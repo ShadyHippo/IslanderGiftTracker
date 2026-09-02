@@ -39,6 +39,7 @@
   import { createDebouncedQuery } from './search.svelte';
   import { getInstallState, runInstall } from './install.svelte';
   import LazyImage from './LazyImage.svelte';
+  import ThemeToggle from './ThemeToggle.svelte';
   import { getNet } from './net.svelte';
 
   const refdb = getRefDbState();
@@ -188,6 +189,7 @@
         </button>
       </div>
       <div class="flex items-center gap-2">
+        <ThemeToggle />
         <button
           type="button"
           onclick={openAbout}

@@ -12,6 +12,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1" />
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#166534" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#052e16" />
+    <script>
+      // Apply the theme before first paint so dark-mode users never see a
+      // flash of light. An explicit '@theme' choice (from the header switch)
+      // wins; otherwise follow the OS. Mirrors theme.svelte.ts.
+      try {
+        var t = localStorage.getItem('@theme');
+        var dark = t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.classList.toggle('dark', dark);
+        document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+        for (var m of document.querySelectorAll('meta[name="theme-color"]')) m.content = dark ? '#052e16' : '#166534';
+      } catch (e) {}
+    </script>
     <link rel="manifest" href="/manifest.json" />
     <title>ACNH Gift Tracker</title>
 

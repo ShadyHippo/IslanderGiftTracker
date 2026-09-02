@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+:root {
+  /* Follow the OS theme for native UI (scrollbars, form controls) and let
+     Tailwind v4's dark: variant — which ships as prefers-color-scheme by
+     default — drive the app's own colors. */
+  color-scheme: light dark;
+}
+
 html {
   /* Status-bar clearance lives on the sticky headers (they carry
      env(safe-area-inset-top) themselves and are pinned at every scroll

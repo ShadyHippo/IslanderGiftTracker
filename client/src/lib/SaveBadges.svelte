@@ -47,15 +47,15 @@
 
 <div class="fixed bottom-4 right-4 z-50 flex items-center gap-2" style="padding-bottom: env(safe-area-inset-bottom, 0px)">
   {#if progress.error}
-    <span class="rounded-lg bg-red-100 px-3 py-1 text-xs font-medium text-red-700">{progress.error}</span>
+    <span class="rounded-lg bg-red-100 px-3 py-1 text-xs font-medium text-red-700 dark:bg-red-950/60 dark:text-red-300">{progress.error}</span>
   {/if}
   <span
     data-save-local={progress.localSaved ? 'saved' : 'writing'}
     title={progress.localSaved ? 'Saved on this device' : 'Saving to this device…'}
     aria-label={progress.localSaved ? 'Saved on this device' : 'Saving to this device'}
     class="flex h-9 w-9 items-center justify-center rounded-full shadow-lg {progress.localSaved
-      ? 'bg-green-100 text-green-600'
-      : 'bg-amber-100 text-amber-800'}"
+      ? 'bg-green-100 text-green-600 dark:bg-green-800 dark:text-green-300'
+      : 'bg-amber-100 text-amber-800 dark:bg-amber-400/20 dark:text-amber-300'}"
   >
     {#if progress.localSaved}
       {@render floppyCheck()}
@@ -72,8 +72,8 @@
         : 'Waiting to sync (offline or unsaved)'}
     aria-label={network === 'synced' ? 'Synced to server' : network === 'syncing' ? 'Syncing changes' : 'Waiting to sync'}
     class="flex h-9 w-9 items-center justify-center rounded-full shadow-lg {network === 'synced'
-      ? 'bg-green-100 text-green-600'
-      : 'bg-amber-100 text-amber-800'}"
+      ? 'bg-green-100 text-green-600 dark:bg-green-800 dark:text-green-300'
+      : 'bg-amber-100 text-amber-800 dark:bg-amber-400/20 dark:text-amber-300'}"
   >
     {#if network === 'synced'}
       {@render cloudCheck()}

@@ -73,16 +73,16 @@
   }
 </script>
 
-<div class="flex min-h-screen items-center justify-center bg-green-50 p-6">
+<div class="flex min-h-screen items-center justify-center bg-green-50 p-6 dark:bg-green-950">
   <form
     onsubmit={onSubmit}
-    class="w-full max-w-sm rounded-2xl border border-green-200 bg-white p-6 shadow-sm"
+    class="w-full max-w-sm rounded-2xl border border-green-200 bg-white p-6 shadow-sm dark:border-green-800 dark:bg-green-900"
   >
-    <h1 class="mb-1 text-2xl font-bold text-green-800">ACNH Gift Tracker</h1>
-    <p class="mb-6 text-sm text-green-700">Sign in to your island</p>
+    <h1 class="mb-1 text-2xl font-bold text-green-800 dark:text-green-100">ACNH Gift Tracker</h1>
+    <p class="mb-6 text-sm text-green-700 dark:text-green-300">Sign in to your island</p>
 
     {#if oauthError}
-      <p class="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+      <p class="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/60 dark:text-red-300" role="alert">
         {oauthError}
       </p>
     {/if}
@@ -91,13 +91,13 @@
       <!-- Same gentle spinner as the boot screen: nothing flashes, nothing is
            assumed while the config round-trip is in flight. -->
       <div class="flex flex-col items-center justify-center gap-3 py-10" role="status" aria-live="polite">
-        <span class="h-10 w-10 animate-spin rounded-full border-4 border-green-200 border-t-green-700"></span>
-        <p class="text-sm font-medium text-green-700">Getting your island ready…</p>
+        <span class="h-10 w-10 animate-spin rounded-full border-4 border-green-200 border-t-green-700 dark:border-green-700 dark:border-t-green-400"></span>
+        <p class="text-sm font-medium text-green-700 dark:text-green-300">Getting your island ready…</p>
       </div>
     {:else if cfg.mode === 'google'}
       <a
         href="/api/auth/google/start"
-        class="flex w-full items-center justify-center gap-3 rounded-lg border border-green-300 bg-white px-4 py-3 text-base font-semibold text-green-900 no-underline shadow-sm transition-colors hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-green-300"
+        class="flex w-full items-center justify-center gap-3 rounded-lg border border-green-300 bg-white px-4 py-3 text-base font-semibold text-green-900 no-underline shadow-sm transition-colors hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-green-300 dark:border-green-700 dark:bg-green-900 dark:text-green-50 dark:hover:bg-green-800/60"
       >
         <svg viewBox="0 0 24 24" class="h-5 w-5" aria-hidden="true">
           <path fill="#4285F4" d="M23.5 12.3c0-.9-.1-1.7-.2-2.5H12v4.8h6.5a5.6 5.6 0 0 1-2.4 3.6v3h3.9c2.3-2.1 3.5-5.2 3.5-8.9z" />
@@ -108,18 +108,18 @@
         Continue with Google
       </a>
       {#if !isSecure}
-        <p class="mt-3 text-xs leading-relaxed text-green-700">
+        <p class="mt-3 text-xs leading-relaxed text-green-700 dark:text-green-300">
           Google sign-in only works over HTTPS. Visit
           <span class="font-medium">acnh.datahippo.top</span> instead of this
           address to sign in.
         </p>
       {/if}
-      <p class="mt-4 text-xs leading-relaxed text-green-600">
+      <p class="mt-4 text-xs leading-relaxed text-green-600 dark:text-green-400">
         Your first sign-in creates your island automatically.
       </p>
     {:else}
       <label class="mb-4 block">
-      <span class="mb-1 block text-sm font-medium text-green-800">Username</span>
+      <span class="mb-1 block text-sm font-medium text-green-800 dark:text-green-100">Username</span>
       <input
         bind:value={username}
         type="text"
@@ -130,24 +130,24 @@
         spellcheck="false"
         required
         placeholder="e.g. mabel"
-        class="w-full rounded-lg border border-green-300 px-3 py-2.5 text-[17px] text-green-900 placeholder-green-400 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200"
+        class="w-full rounded-lg border border-green-300 px-3 py-2.5 text-[17px] text-green-900 placeholder-green-400 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200 dark:border-green-700 dark:text-green-50 dark:placeholder-green-600"
       />
     </label>
 
     <label class="mb-5 block">
-      <span class="mb-1 block text-sm font-medium text-green-800">Password</span>
+      <span class="mb-1 block text-sm font-medium text-green-800 dark:text-green-100">Password</span>
       <input
         bind:value={password}
         type="password"
         name="password"
         autocomplete="current-password"
         required
-        class="w-full rounded-lg border border-green-300 px-3 py-2.5 text-[17px] text-green-900 placeholder-green-400 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200"
+        class="w-full rounded-lg border border-green-300 px-3 py-2.5 text-[17px] text-green-900 placeholder-green-400 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200 dark:border-green-700 dark:text-green-50 dark:placeholder-green-600"
       />
     </label>
 
     {#if error}
-      <p class="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+      <p class="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/60 dark:text-red-300" role="alert">
         {error}
       </p>
     {/if}
@@ -162,20 +162,20 @@
     {/if}
 
     {#if install.offer}
-      <div class="mt-5 border-t border-green-100 pt-4">
+      <div class="mt-5 border-t border-green-100 pt-4 dark:border-green-800/70">
         <button
           type="button"
           onclick={() => runInstall()}
-          class="w-full rounded-lg border border-green-300 bg-green-50 px-4 py-2.5 text-sm font-semibold text-green-800 transition-colors hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-green-200"
+          class="w-full rounded-lg border border-green-300 bg-green-50 px-4 py-2.5 text-sm font-semibold text-green-800 transition-colors hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-green-200 dark:border-green-700 dark:bg-green-800/60 dark:text-green-100 dark:hover:bg-green-800"
         >
           Install offline data (~{install.sizeMB} MB)
         </button>
         {#if install.error}
-          <p class="mt-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+          <p class="mt-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/60 dark:text-red-300" role="alert">
             {install.error}
           </p>
         {/if}
-        <p class="mt-2 text-xs leading-relaxed text-green-600">
+        <p class="mt-2 text-xs leading-relaxed text-green-600 dark:text-green-400">
           Downloads ~{install.sizeMB} MB · uses ~{install.onDeviceMB} MB of space on this device,
           keeping every image available offline. Tip: add this page to your home screen first
           (browser menu → “Add to Home screen” / “Install”) so it runs like an app in its own
@@ -183,27 +183,27 @@
         </p>
       </div>
     {:else if install.installed}
-      <p class="mt-4 text-center text-xs font-medium text-green-600">✓ Offline data installed</p>
+      <p class="mt-4 text-center text-xs font-medium text-green-600 dark:text-green-400">✓ Offline data installed</p>
     {/if}
 
-    <div class="mt-5 flex items-center justify-between gap-3 border-t border-green-100 pt-4">
+    <div class="mt-5 flex items-center justify-between gap-3 border-t border-green-100 pt-4 dark:border-green-800/70">
       <button
         type="button"
         onclick={openAbout}
-        class="rounded-lg border border-green-300 bg-white px-4 py-2.5 text-sm font-semibold text-green-800 transition-colors hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-green-200"
+        class="rounded-lg border border-green-300 bg-white px-4 py-2.5 text-sm font-semibold text-green-800 transition-colors hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-green-200 dark:border-green-700 dark:bg-green-900 dark:text-green-100 dark:hover:bg-green-800"
       >
         About
       </button>
       <div class="flex items-center gap-3">
         <a
           href="/privacy"
-          class="text-xs font-medium text-green-600 underline decoration-dotted hover:text-green-800"
+          class="text-xs font-medium text-green-600 underline decoration-dotted hover:text-green-800 dark:text-green-400 dark:hover:text-green-200"
         >
           Privacy
         </a>
         <a
           href="/tos"
-          class="text-xs font-medium text-green-600 underline decoration-dotted hover:text-green-800"
+          class="text-xs font-medium text-green-600 underline decoration-dotted hover:text-green-800 dark:text-green-400 dark:hover:text-green-200"
         >
           Terms
         </a>

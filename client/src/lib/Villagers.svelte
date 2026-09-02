@@ -173,8 +173,8 @@
   }
 </script>
 
-<div class="flex min-h-screen flex-col bg-green-50">
-  <header class="sticky top-0 z-10 border-b border-green-200 bg-white/95 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur">
+<div class="flex min-h-screen flex-col bg-green-50 dark:bg-green-950">
+  <header class="sticky top-0 z-10 border-b border-green-200 bg-white/95 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur dark:border-green-800 dark:bg-green-900/95">
     <div class="mb-3 flex items-center justify-between gap-2">
       <div class="flex min-w-0 items-center gap-2">
         <ConnectionStatus />
@@ -182,7 +182,7 @@
           type="button"
           onclick={clearSearchAndFilters}
           title="Clear search and filters"
-          class="rounded-lg px-1 text-xl font-bold text-green-800 transition-colors hover:text-green-600 focus:outline-none focus:ring-2 focus:ring-green-200"
+          class="rounded-lg px-1 text-xl font-bold text-green-800 transition-colors hover:text-green-600 focus:outline-none focus:ring-2 focus:ring-green-200 dark:text-green-100 dark:hover:text-green-300"
         >
           Villagers
         </button>
@@ -191,7 +191,7 @@
         <button
           type="button"
           onclick={openAbout}
-          class="rounded-lg bg-amber-100 px-3 py-1.5 text-sm text-amber-800 transition-colors hover:bg-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-200"
+          class="rounded-lg bg-amber-100 px-3 py-1.5 text-sm text-amber-800 transition-colors hover:bg-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-200 dark:bg-amber-400/20 dark:text-amber-300 dark:hover:bg-amber-400/30"
         >
           About
         </button>
@@ -201,7 +201,7 @@
           title={!net.online && progress.dirty
             ? "You have unsaved changes that haven't synced yet — they'll upload when you're back online."
             : undefined}
-          class="rounded-lg border border-green-300 bg-white px-3 py-1.5 text-sm text-green-800 hover:bg-green-100 disabled:opacity-60"
+          class="rounded-lg border border-green-300 bg-white px-3 py-1.5 text-sm text-green-800 hover:bg-green-100 disabled:opacity-60 dark:border-green-700 dark:bg-green-900 dark:text-green-100 dark:hover:bg-green-800"
         >
           {loggingOut ? 'Signing out…' : !net.online && progress.dirty ? 'Unsaved…' : 'Sign out'}
         </button>
@@ -211,7 +211,7 @@
       bind:value={search.raw}
       type="search"
       placeholder="Search by name, species, personality…"
-      class="w-full rounded-lg border border-green-300 px-3 py-2.5 text-[17px] text-green-900 placeholder-green-400 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200"
+      class="w-full rounded-lg border border-green-300 px-3 py-2.5 text-[17px] text-green-900 placeholder-green-400 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200 dark:border-green-700 dark:text-green-50 dark:placeholder-green-600"
     />
     {#if refdb.status === 'ready'}
       <div class="mt-2 flex gap-2">
@@ -219,8 +219,8 @@
           aria-pressed={showFavorites}
           onclick={toggleFavorites}
           class="rounded-full border px-3 py-1.5 text-sm transition-colors {showFavorites
-            ? 'border-amber-400 bg-amber-100 text-amber-800'
-            : 'border-green-300 bg-white text-green-700 hover:bg-green-100'}"
+            ? 'border-amber-400 bg-amber-100 text-amber-800 dark:bg-amber-400/20 dark:text-amber-300'
+            : 'border-green-300 bg-white text-green-700 hover:bg-green-100 dark:border-green-700 dark:bg-green-900 dark:text-green-300 dark:hover:bg-green-800'}"
         >
           ★ Favorites
         </button>
@@ -229,7 +229,7 @@
           onclick={toggleIsland}
           class="rounded-full border px-3 py-1.5 text-sm transition-colors {showIsland
             ? 'border-green-700 bg-green-700 text-white'
-            : 'border-green-300 bg-white text-green-700 hover:bg-green-100'}"
+            : 'border-green-300 bg-white text-green-700 hover:bg-green-100 dark:border-green-700 dark:bg-green-900 dark:text-green-300 dark:hover:bg-green-800'}"
         >
           ✓ On my island
         </button>
@@ -241,7 +241,7 @@
             onclick={() => void runInstall()}
             disabled={install.phase === 'installing'}
             title="Download all images to this device for offline use"
-            class="ml-auto rounded-lg px-3 py-1.5 text-sm text-green-700 transition-colors hover:bg-green-100 disabled:opacity-60"
+            class="ml-auto rounded-lg px-3 py-1.5 text-sm text-green-700 transition-colors hover:bg-green-100 disabled:opacity-60 dark:text-green-300 dark:hover:bg-green-800"
           >
             {install.phase === 'installing'
               ? `⬇ Downloading… ${install.progress}%`
@@ -249,7 +249,7 @@
           </button>
         {/if}
       </div>
-      <p class="mt-2 text-xs text-green-700">
+      <p class="mt-2 text-xs text-green-700 dark:text-green-300">
         {filtered.length} of {villagers.length} villagers
       </p>
     {/if}
@@ -257,9 +257,9 @@
 
   <main class="flex-1 p-4">
     {#if refdb.status === 'downloading'}
-      <div class="mx-auto max-w-sm rounded-xl border border-green-200 bg-white p-6 text-center">
-        <p class="mb-3 text-green-800">Downloading reference data… {refdb.progress}%</p>
-        <div class="h-2 w-full overflow-hidden rounded-full bg-green-100">
+      <div class="mx-auto max-w-sm rounded-xl border border-green-200 bg-white p-6 text-center dark:border-green-800 dark:bg-green-900">
+        <p class="mb-3 text-green-800 dark:text-green-100">Downloading reference data… {refdb.progress}%</p>
+        <div class="h-2 w-full overflow-hidden rounded-full bg-green-100 dark:bg-green-800">
           <div
             class="h-full rounded-full bg-green-600 transition-all"
             style="width: {refdb.progress}%"
@@ -268,14 +268,14 @@
       </div>
     {:else if refdb.status === 'checking'}
       <!-- silent: the boot spinner (App.svelte) covers this window -->
-      <p class="py-10 text-center text-green-700">Loading…</p>
+      <p class="py-10 text-center text-green-700 dark:text-green-300">Loading…</p>
     {:else if refdb.status === 'initializing'}
-      <div class="mx-auto max-w-sm rounded-xl border border-green-200 bg-white p-6 text-center">
-        <p class="text-green-800">Loading villagers…</p>
+      <div class="mx-auto max-w-sm rounded-xl border border-green-200 bg-white p-6 text-center dark:border-green-800 dark:bg-green-900">
+        <p class="text-green-800 dark:text-green-100">Loading villagers…</p>
       </div>
     {:else if refdb.status === 'error'}
-      <div class="mx-auto max-w-sm rounded-xl border border-red-200 bg-white p-6 text-center">
-        <p class="mb-3 text-red-700">{refdb.error}</p>
+      <div class="mx-auto max-w-sm rounded-xl border border-red-200 bg-white p-6 text-center dark:border-red-800 dark:bg-green-900">
+        <p class="mb-3 text-red-700 dark:text-red-300">{refdb.error}</p>
         <button
           onclick={() => void loadReferenceDb()}
           class="rounded-lg bg-green-700 px-4 py-2 font-semibold text-white hover:bg-green-800"
@@ -285,13 +285,13 @@
       </div>
     {:else if refdb.status === 'ready'}
       {#if filtered.length === 0}
-        <p class="py-10 text-center text-green-700">No villagers match “{search.raw}”.</p>
+        <p class="py-10 text-center text-green-700 dark:text-green-300">No villagers match “{search.raw}”.</p>
       {:else}
-        <ul class="mx-auto max-w-2xl divide-y divide-green-200 overflow-hidden rounded-xl border border-green-200 bg-white">
+        <ul class="mx-auto max-w-2xl divide-y divide-green-200 overflow-hidden rounded-xl border border-green-200 bg-white dark:divide-green-800 dark:border-green-800 dark:bg-green-900">
           {#each filtered.slice(0, renderCount) as v (v.name)}
             {@const fav = flags.get(v.name)?.favorite ?? false}
             {@const island = flags.get(v.name)?.onIsland ?? false}
-            <li class="flex items-center gap-2 px-4 py-3 hover:bg-green-50">
+            <li class="flex items-center gap-2 px-4 py-3 hover:bg-green-50 dark:hover:bg-green-800/60">
               <a
                 href={p('/villager/:name', { params: { name: slugify(v.name) } })}
                 class="flex min-w-0 flex-1 items-center gap-3"
@@ -312,8 +312,8 @@
                   </span>
                 {/if}
                 <div class="min-w-0 flex-1">
-                  <p class="truncate font-semibold text-green-900">{v.name}</p>
-                  <p class="truncate text-sm text-green-700">
+                  <p class="truncate font-semibold text-green-900 dark:text-green-50">{v.name}</p>
+                  <p class="truncate text-sm text-green-700 dark:text-green-300">
                     {v.species} · {v.personality}{v.hobby ? ` · ${v.hobby}` : ''}
                   </p>
                 </div>
@@ -326,7 +326,7 @@
                 onclick={() => toggleFavorite(v.name)}
                 class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm font-bold transition-colors {fav
                   ? 'border-amber-400 bg-amber-400 text-white'
-                  : 'border-green-300 text-amber-500 hover:bg-green-100'}"
+                  : 'border-green-300 text-amber-500 hover:bg-green-100 dark:border-green-700 dark:hover:bg-green-800'}"
               >
                 ★
               </button>
@@ -337,7 +337,7 @@
                 onclick={() => toggleOnIsland(v.name)}
                 class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm font-bold transition-colors {island
                   ? 'border-green-700 bg-green-700 text-white'
-                  : 'border-green-300 text-green-600 hover:bg-green-100'}"
+                  : 'border-green-300 text-green-600 hover:bg-green-100 dark:border-green-700 dark:text-green-300 dark:hover:bg-green-800'}"
               >
                 ✓
               </button>

@@ -28,7 +28,7 @@
     alt,
     class: sizeClass = '',
     placeholder = '',
-    placeholderClass = 'bg-green-100 text-green-600',
+    placeholderClass = 'bg-green-100 text-green-600 dark:bg-green-800 dark:text-green-300',
   }: Props = $props();
 
   let url: string | null = $state(null);

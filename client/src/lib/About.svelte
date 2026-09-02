@@ -102,14 +102,14 @@
       aria-modal="true"
       aria-labelledby="about-title"
       tabindex="-1"
-      class="max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-2xl border border-green-200 bg-white p-6 shadow-lg"
+      class="max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-2xl border border-green-200 bg-white p-6 shadow-lg dark:border-green-800 dark:bg-green-900"
     >
-      <h2 id="about-title" class="mb-4 text-xl font-bold text-green-800">Welcome to ACNH Gift Tracker!</h2>
+      <h2 id="about-title" class="mb-4 text-xl font-bold text-green-800 dark:text-green-100">Welcome to ACNH Gift Tracker!</h2>
 
       <!-- ═══════ 1. One-device warning ═══════ -->
-      <div class="mb-4 rounded-lg border-2 border-red-500 bg-yellow-100 p-3">
-        <p class="text-sm font-extrabold text-red-900">⚠️ WARNING: ONE DEVICE IF OFFLINE</p>
-        <p class="mt-1 text-sm font-bold leading-snug text-red-900">
+      <div class="mb-4 rounded-lg border-2 border-red-500 bg-yellow-100 p-3 dark:border-red-700 dark:bg-yellow-900/40">
+        <p class="text-sm font-extrabold text-red-900 dark:text-red-300">⚠️ WARNING: ONE DEVICE IF OFFLINE</p>
+        <p class="mt-1 text-sm font-bold leading-snug text-red-900 dark:text-red-300">
           Use this app/website on ONE device only. Signing in on a second device and 
           using offline functionality can permanently overwrite your data. 
         </p>
@@ -118,15 +118,15 @@
       <!-- ═══════ 2. Install like an app (collapsible) ═══════ -->
       <details class="group mb-5">
         <summary class="flex cursor-pointer list-none items-center justify-between gap-3">
-          <h3 class="text-sm font-bold text-green-900">Install like an app</h3>
+          <h3 class="text-sm font-bold text-green-900 dark:text-green-50">Install like an app</h3>
           <span class="text-green-400 transition-transform group-open:rotate-90">›</span>
         </summary>
         {#if platform.standalone}
-          <p class="text-xs leading-relaxed text-green-700">
+          <p class="text-xs leading-relaxed text-green-700 dark:text-green-300">
             ✓ Already installed — running as an app.
           </p>
         {:else}
-          <p class="text-xs leading-relaxed text-green-700">
+          <p class="text-xs leading-relaxed text-green-700 dark:text-green-300">
             {installHint(platform.p)} It then opens in its own window, full
             screen, and keeps working offline (or when my server is down).
           </p>
@@ -159,7 +159,7 @@
           href="https://github.com/ShadyHippo/IslanderGiftTracker"
           target="_blank"
           rel="noopener noreferrer"
-          class="font-medium text-green-700 underline decoration-dotted hover:text-green-900"
+          class="font-medium text-green-700 underline decoration-dotted hover:text-green-900 dark:text-green-300 dark:hover:text-green-50"
         >
           Source code ↗
         </a>
@@ -167,14 +167,14 @@
           <button
             type="button"
             onclick={openPrivacy}
-            class="font-medium text-green-700 underline decoration-dotted hover:text-green-900"
+            class="font-medium text-green-700 underline decoration-dotted hover:text-green-900 dark:text-green-300 dark:hover:text-green-50"
           >
             Privacy policy
           </button>
           <button
             type="button"
             onclick={() => { dismissAbout(); void navigate('/tos'); }}
-            class="font-medium text-green-700 underline decoration-dotted hover:text-green-900"
+            class="font-medium text-green-700 underline decoration-dotted hover:text-green-900 dark:text-green-300 dark:hover:text-green-50"
           >
             Terms
           </button>
@@ -184,20 +184,20 @@
       <!-- ═══════ 6. Your data & offline mode (export + danger zone, collapsible) ═══════ -->
       <details class="group mb-5">
         <summary class="flex cursor-pointer list-none items-center justify-between gap-3">
-          <h3 class="text-sm font-bold text-green-900">Your data &amp; offline mode</h3>
+          <h3 class="text-sm font-bold text-green-900 dark:text-green-50">Your data &amp; offline mode</h3>
           <span class="text-green-400 transition-transform group-open:rotate-90">›</span>
         </summary>
-        <p class="text-xs leading-relaxed text-green-700">
+        <p class="text-xs leading-relaxed text-green-700 dark:text-green-300">
           I'm just a hobbyist with a server, my server has nightly downtime when 
           the router reboots and when I do maintenance on my server. 
         </p>
-        <p class="text-xs leading-relaxed text-green-700">
+        <p class="text-xs leading-relaxed text-green-700 dark:text-green-300">
           Everything works offline once installed — your gift log lives on this
           device and syncs to the server automatically when both are online.
           The badges at the bottom tell you where you stand: green means safely
           saved and synced.
         </p>
-        <p class="mt-2 text-xs leading-relaxed text-green-700">
+        <p class="mt-2 text-xs leading-relaxed text-green-700 dark:text-green-300">
           Clearing your browser's site data deletes the offline copies on this
           device. Anything already synced is safe on the server; unsaved edits
           would be lost. The server also keeps recent backups of your data.
@@ -206,11 +206,11 @@
           <button
             type="button"
             onclick={() => exportProgressFile(session.user!.username)}
-            class="mt-3 w-full rounded-lg border border-green-300 bg-white px-4 py-2.5 text-sm font-semibold text-green-800 transition-colors hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-green-200"
+            class="mt-3 w-full rounded-lg border border-green-300 bg-white px-4 py-2.5 text-sm font-semibold text-green-800 transition-colors hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-green-200 dark:border-green-700 dark:bg-green-900 dark:text-green-100 dark:hover:bg-green-800"
           >
             ⬇ Download my data (.sqlite)
           </button>
-          <p class="mt-1 text-center text-[11px] text-green-600">
+          <p class="mt-1 text-center text-[11px] text-green-600 dark:text-green-400">
             A copy of your gift log that you own and keep.
           </p>
         {/if}
@@ -218,19 +218,19 @@
           type="button"
           onclick={onClearCache}
           disabled={clearing}
-          class="mt-2 text-[11px] font-medium text-green-600 underline decoration-dotted hover:text-green-800 disabled:opacity-50"
+          class="mt-2 text-[11px] font-medium text-green-600 underline decoration-dotted hover:text-green-800 disabled:opacity-50 dark:text-green-400 dark:hover:text-green-200"
           title="Clear offline cache & hard reload"
         >
           {clearing ? 'Clearing…' : 'Clear offline cache & reload'}
         </button>
         {#if session.user}
-          <div class="mt-4 rounded-lg border border-red-200 bg-red-50 p-3">
-            <p class="text-xs font-semibold text-red-800">Danger zone</p>
+          <div class="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950/60">
+            <p class="text-xs font-semibold text-red-800 dark:text-red-300">Danger zone</p>
             <button
               type="button"
               onclick={onDeleteAccount}
               disabled={deleting}
-              class="mt-2 w-full rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 disabled:opacity-60"
+              class="mt-2 w-full rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 disabled:opacity-60 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-900/60"
             >
               {deleting ? 'Deleting…' : 'Delete my account'}
             </button>
@@ -238,12 +238,12 @@
         {/if}
       </details>
 
-      <p class="mb-3 select-text text-center text-[10px] leading-none text-green-800/40">
+      <p class="mb-3 select-text text-center text-[10px] leading-none text-green-800/40 dark:text-green-100/40">
         {BUILD_HASH}{BUILD_TIME ? ` · ${BUILD_TIME}` : ''}
       </p>
 
       <!-- ═══════ 7. Legal ═══════ -->
-      <p class="mb-5 text-xs leading-relaxed text-green-700">
+      <p class="mb-5 text-xs leading-relaxed text-green-700 dark:text-green-300">
         Animal Crossing: New Horizons and all related assets are © Nintendo.
         This app is not affiliated with or endorsed by Nintendo.
       </p>

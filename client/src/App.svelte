@@ -151,9 +151,9 @@
     both are local/fast when cached, and the caps above guarantee this never
     outstays its welcome.
   -->
-  <div class="fixed inset-0 z-[90] flex flex-col items-center justify-center gap-4 bg-green-50" style="padding-top: env(safe-area-inset-top, 0px)">
-    <span class="h-10 w-10 animate-spin rounded-full border-4 border-green-200 border-t-green-700"></span>
-    <p class="text-sm font-medium text-green-700">Getting your island ready…</p>
+  <div class="fixed inset-0 z-[90] flex flex-col items-center justify-center gap-4 bg-green-50 dark:bg-green-950" style="padding-top: env(safe-area-inset-top, 0px)">
+    <span class="h-10 w-10 animate-spin rounded-full border-4 border-green-200 border-t-green-700 dark:border-green-700 dark:border-t-green-400"></span>
+    <p class="text-sm font-medium text-green-700 dark:text-green-300">Getting your island ready…</p>
   </div>
 {:else if !session.user && !isPublicPage}
   <!--
@@ -171,7 +171,7 @@
       <SaveBadges />
     {/if}
     {#if refdb.status === 'downloading' || (refdb.status === 'initializing' && refdb.downloaded)}
-      <div class="fixed inset-x-0 top-0 z-50 flex flex-col items-center gap-1 bg-amber-100/95 px-4 py-2 text-center text-sm font-medium text-amber-900 shadow backdrop-blur" style="padding-top: env(safe-area-inset-top, 12px)">
+      <div class="fixed inset-x-0 top-0 z-50 flex flex-col items-center gap-1 bg-amber-100/95 px-4 py-2 text-center text-sm font-medium text-amber-900 shadow backdrop-blur dark:bg-amber-950/70 dark:text-amber-200" style="padding-top: env(safe-area-inset-top, 12px)">
         <span class="flex items-center gap-2">
           <span class="h-3 w-3 animate-spin rounded-full border-2 border-amber-900/30 border-t-amber-900"></span>
           {#if refdb.status === 'downloading'}
@@ -191,13 +191,13 @@
   <!-- Full-screen takeover: blocks browsing so lazy loads don't compete with
        the bundle download on the server's uplink. Overlays (not replaces)
        whatever is underneath, keeping the login form state intact. -->
-  <div class="fixed inset-0 z-[60] flex items-center justify-center bg-green-50/95 p-6 backdrop-blur-sm">
+  <div class="fixed inset-0 z-[60] flex items-center justify-center bg-green-50/95 p-6 backdrop-blur-sm dark:bg-green-950/95">
     <div class="w-full max-w-sm">
-      <p class="mb-3 text-center text-sm font-medium text-green-800">{install.detail}</p>
-      <div class="h-3 w-full overflow-hidden rounded-full bg-green-100">
+      <p class="mb-3 text-center text-sm font-medium text-green-800 dark:text-green-100">{install.detail}</p>
+      <div class="h-3 w-full overflow-hidden rounded-full bg-green-100 dark:bg-green-800">
         <div class="h-full bg-green-700 transition-all duration-200" style="width: {install.progress}%"></div>
       </div>
-      <p class="mt-2 text-center text-xs text-green-700">{Math.round(install.progress)}%</p>
+      <p class="mt-2 text-center text-xs text-green-700 dark:text-green-300">{Math.round(install.progress)}%</p>
     </div>
   </div>
 {/if}

@@ -162,16 +162,16 @@
 
 </script>
 
-<div class="min-h-screen bg-green-50">
-  <header class="sticky top-0 z-10 flex items-center gap-2 border-b border-green-200 bg-white/95 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur">
+<div class="min-h-screen bg-green-50 dark:bg-green-950">
+  <header class="sticky top-0 z-10 flex items-center gap-2 border-b border-green-200 bg-white/95 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur dark:border-green-800 dark:bg-green-900/95">
     <button
       onclick={goBack}
-      class="rounded-lg border border-green-300 bg-white px-3 py-1.5 text-sm text-green-800 hover:bg-green-100"
+      class="rounded-lg border border-green-300 bg-white px-3 py-1.5 text-sm text-green-800 hover:bg-green-100 dark:border-green-700 dark:bg-green-900 dark:text-green-100 dark:hover:bg-green-800"
     >
       ← Back
     </button>
     <ConnectionStatus />
-    <h1 class="min-w-0 flex-1 truncate text-xl font-bold text-green-800">{name}</h1>
+    <h1 class="min-w-0 flex-1 truncate text-xl font-bold text-green-800 dark:text-green-100">{name}</h1>
     {#if villager}
       {@const fav = flags.get(villager.name)?.favorite ?? false}
       {@const island = flags.get(villager.name)?.onIsland ?? false}
@@ -182,7 +182,7 @@
         onclick={() => toggleFavorite(villager!.name)}
         class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm font-bold transition-colors {fav
           ? 'border-amber-400 bg-amber-400 text-white'
-          : 'border-green-300 text-amber-500 hover:bg-green-100'}"
+          : 'border-green-300 text-amber-500 hover:bg-green-100 dark:border-green-700 dark:hover:bg-green-800'}"
       >
         ★
       </button>
@@ -193,7 +193,7 @@
         onclick={() => toggleOnIsland(villager!.name)}
         class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm font-bold transition-colors {island
           ? 'border-green-700 bg-green-700 text-white'
-          : 'border-green-300 text-green-600 hover:bg-green-100'}"
+          : 'border-green-300 text-green-600 hover:bg-green-100 dark:border-green-700 dark:text-green-300 dark:hover:bg-green-800'}"
       >
         ✓
       </button>
@@ -202,13 +202,13 @@
 
   <main class="mx-auto max-w-2xl space-y-3 p-3">
     {#if refdb.status !== 'ready'}
-      <p class="py-10 text-center text-green-700">Loading…</p>
+      <p class="py-10 text-center text-green-700 dark:text-green-300">Loading…</p>
     {:else if !villager}
-      <p class="py-10 text-center text-green-700">Villager not found.</p>
+      <p class="py-10 text-center text-green-700 dark:text-green-300">Villager not found.</p>
     {:else}
       <!-- Compact hero: the old p-5 + 96px avatar pushed every card below the
            fold, forcing a scroll before any real content. -->
-      <section class="flex items-center gap-3 rounded-xl border border-green-200 bg-white p-3">
+      <section class="flex items-center gap-3 rounded-xl border border-green-200 bg-white p-3 dark:border-green-800 dark:bg-green-900">
         {#if imgUrl}
           <LazyImage
             path={imgUrl}
@@ -223,66 +223,66 @@
           </span>
         {/if}
         <div class="min-w-0">
-          <p class="text-lg font-bold text-green-900">{villager.name}</p>
-          <p class="truncate text-sm text-green-700">
+          <p class="text-lg font-bold text-green-900 dark:text-green-50">{villager.name}</p>
+          <p class="truncate text-sm text-green-700 dark:text-green-300 dark:text-green-300">
             {villager.species}{villager.gender ? ` · ${villager.gender.toLowerCase()}` : ''} ·
             {villager.personality}{villager.hobby ? ` · ${villager.hobby}` : ''}
           </p>
         </div>
       </section>
 
-      <section class="rounded-xl border border-green-200 bg-white p-5">
-        <h2 class="mb-3 font-semibold text-green-900">About</h2>
+      <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-900">
+        <h2 class="mb-3 font-semibold text-green-900 dark:text-green-50 dark:text-green-50">About</h2>
         <dl class="space-y-2">
           {#if villager.birthday}
             <div class="flex items-baseline justify-between gap-4">
-              <dt class="text-sm text-green-700">Birthday</dt>
-              <dd class="font-medium text-green-900">{villager.birthday}</dd>
+              <dt class="text-sm text-green-700 dark:text-green-300">Birthday</dt>
+              <dd class="font-medium text-green-900 dark:text-green-50">{villager.birthday}</dd>
             </div>
           {/if}
           {#if villager.catchphrase}
             <div class="flex items-baseline justify-between gap-4">
-              <dt class="text-sm text-green-700">Catchphrase</dt>
-              <dd class="font-medium text-green-900">“{villager.catchphrase}”</dd>
+              <dt class="text-sm text-green-700 dark:text-green-300">Catchphrase</dt>
+              <dd class="font-medium text-green-900 dark:text-green-50">“{villager.catchphrase}”</dd>
             </div>
           {/if}
         </dl>
       </section>
 
       {#if likes.length}
-        <section class="rounded-xl border border-green-200 bg-white p-5">
-          <h2 class="mb-3 font-semibold text-green-900">Likes</h2>
+        <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-900">
+          <h2 class="mb-3 font-semibold text-green-900 dark:text-green-50 dark:text-green-50">Likes</h2>
           <dl class="space-y-2">
             {#each likes as like}
               <div class="flex items-baseline justify-between gap-4">
-                <dt class="text-sm text-green-700">{like.label}</dt>
-                <dd class="font-medium text-green-900">{like.value}</dd>
+                <dt class="text-sm text-green-700 dark:text-green-300">{like.label}</dt>
+                <dd class="font-medium text-green-900 dark:text-green-50">{like.value}</dd>
               </div>
             {/each}
           </dl>
         </section>
       {/if}
 
-      <section class="rounded-xl border border-green-200 bg-white p-5">
-        <h2 class="mb-1 font-semibold text-green-900">Gift ideas</h2>
-        <p class="mb-3 text-xs text-green-700">
+      <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-900">
+        <h2 class="mb-1 font-semibold text-green-900 dark:text-green-50 dark:text-green-50">Gift ideas</h2>
+        <p class="mb-3 text-xs text-green-700 dark:text-green-300">
           Matched against their favorite colors &amp; styles.
         </p>
         <input
           bind:value={giftSearch.raw}
           type="search"
           placeholder="Search gifts by name…"
-          class="mb-3 w-full rounded-lg border border-green-300 px-3 py-2.5 text-[17px] text-green-900 placeholder-green-400 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200"
+          class="mb-3 w-full rounded-lg border border-green-300 px-3 py-2.5 text-[17px] text-green-900 placeholder-green-400 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200 dark:border-green-700 dark:text-green-50 dark:placeholder-green-600"
         />
         {#if groups.length === 0}
-          <p class="text-sm text-green-700">No matches found.</p>
+          <p class="text-sm text-green-700 dark:text-green-300">No matches found.</p>
         {:else}
           {#snippet groupDetails(group: GiftGroup, items: GiftIdea[])}
-            <details class="group rounded-xl border border-green-200">
+            <details class="group rounded-xl border border-green-200 dark:border-green-800">
               <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
                 <span class="flex items-baseline gap-2">
-                  <span class="font-semibold text-green-900">{group.label}</span>
-                  <span class="text-xs text-green-600">
+                  <span class="font-semibold text-green-900 dark:text-green-50">{group.label}</span>
+                  <span class="text-xs text-green-600 dark:text-green-400">
                     {fmt(group.perfect)}
                   </span>
                 </span>
@@ -290,7 +290,7 @@
               </summary>
 
               {#if items.length > 0}
-                <ul class="divide-y divide-green-100 border-t border-green-100">
+                <ul class="divide-y divide-green-100 border-t border-green-100 dark:divide-green-800/70 dark:border-green-800/70">
                 {#each visibleItems(items, group.key) as idea}
                   {@const isGifted = gifted.has(idea.name)}
                   <li class="flex items-start gap-3 px-4 py-2.5 transition-opacity {isGifted ? 'opacity-60' : ''}">
@@ -302,34 +302,34 @@
                         placeholder={idea.name.charAt(0).toUpperCase()}
                       />
                     {:else}
-                      <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-green-100 text-green-600">
+                      <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-green-100 text-green-600 dark:bg-green-800 dark:text-green-300">
                         {idea.name.charAt(0).toUpperCase()}
                       </span>
                     {/if}
                     <div class="min-w-0 flex-1">
                       <div class="flex items-baseline justify-between gap-3">
-                        <p class="font-medium text-green-900">
+                        <p class="font-medium text-green-900 dark:text-green-50">
                           {idea.name}{idea.variation ? ` (${idea.variation})` : ''}
                         </p>
-                        <span class="shrink-0 text-xs text-green-600">{idea.category}</span>
+                        <span class="shrink-0 text-xs text-green-600 dark:text-green-400">{idea.category}</span>
                       </div>
                       <div class="mt-1 flex flex-wrap gap-1">
                         {#each idea.colorMatch as c}
-                          <span class="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-800">
+                          <span class="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-800 dark:bg-green-800 dark:text-green-200">
                             ♥ {c}
                           </span>
                         {/each}
                         {#each idea.styleMatch as s}
-                          <span class="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-800">
+                          <span class="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-800 dark:bg-green-800 dark:text-green-200">
                             style: {s}
                           </span>
                         {/each}
                       </div>
                       {#if idea.labelThemes}
-                        <p class="mt-1 text-xs text-green-500">Themes: {idea.labelThemes}</p>
+                        <p class="mt-1 text-xs text-green-500 dark:text-green-400">Themes: {idea.labelThemes}</p>
                       {/if}
                       {#if idea.source}
-                        <p class="mt-1 text-xs text-green-600">Buy: {idea.source}</p>
+                        <p class="mt-1 text-xs text-green-600 dark:text-green-400">Buy: {idea.source}</p>
                       {/if}
                     </div>
                     <button
@@ -338,7 +338,7 @@
                       onclick={() => toggleGifted(villager!.name, idea.name)}
                       class="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm font-bold transition-colors {isGifted
                         ? 'border-green-700 bg-green-700 text-white'
-                        : 'border-green-300 text-green-600 hover:bg-green-100'}"
+                        : 'border-green-300 text-green-600 hover:bg-green-100 dark:border-green-700 dark:text-green-300 dark:hover:bg-green-800'}"
                     >
                       ✓
                     </button>
@@ -348,7 +348,7 @@
 
                 {#if !showAll[group.key] && items.length > VISIBLE}
                   <button
-                    class="w-full border-t border-green-100 px-4 py-2.5 text-sm font-medium text-green-700 hover:bg-green-50"
+                    class="w-full border-t border-green-100 px-4 py-2.5 text-sm font-medium text-green-700 hover:bg-green-50 dark:border-green-800/70 dark:text-green-300 dark:hover:bg-green-800/60"
                     onclick={() => (showAll[group.key] = true)}
                   >
                     Show all {fmt(items.length - VISIBLE)} more
@@ -367,8 +367,8 @@
       </section>
 
       {#if house.size > 0}
-        <section class="rounded-xl border border-green-200 bg-white p-5">
-          <h2 class="mb-3 font-semibold text-green-900">Their house</h2>
+        <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-900">
+          <h2 class="mb-3 font-semibold text-green-900 dark:text-green-50 dark:text-green-50">Their house</h2>
           {#if housePhotoUrl('interior')}
             <LazyImage
               path={housePhotoUrl('interior')}
@@ -383,15 +383,15 @@
               class="mb-3 w-full rounded-lg"
             />
           {/if}
-          <details class="group mt-3 rounded-xl border border-green-200">
+          <details class="group mt-3 rounded-xl border border-green-200 dark:border-green-800">
             <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
               <span class="flex items-baseline gap-2">
-                <span class="font-semibold text-green-900">House furniture</span>
-                <span class="text-xs text-green-600">{house.size}</span>
+                <span class="font-semibold text-green-900 dark:text-green-50">House furniture</span>
+                <span class="text-xs text-green-600 dark:text-green-400">{house.size}</span>
               </span>
               <span class="text-green-400 transition-transform group-open:rotate-90">›</span>
             </summary>
-            <ul class="divide-y divide-green-100 border-t border-green-100">
+            <ul class="divide-y divide-green-100 border-t border-green-100 dark:divide-green-800/70 dark:border-green-800/70">
               {#each [...house.values()] as item (item.name)}
                 {@const img = houseImgUrl(item.name)}
                 <li class="flex items-start gap-3 px-4 py-2.5">
@@ -403,20 +403,20 @@
                       placeholder={item.name.charAt(0).toUpperCase()}
                     />
                   {:else}
-                    <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-green-100 text-green-600">
+                    <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-green-100 text-green-600 dark:bg-green-800 dark:text-green-300">
                       {item.name.charAt(0).toUpperCase()}
                     </span>
                   {/if}
                   <div class="min-w-0 flex-1">
-                    <p class="font-medium text-green-900">{item.name}</p>
+                    <p class="font-medium text-green-900 dark:text-green-50">{item.name}</p>
                     {#if item.category}
-                      <p class="text-xs text-green-600">{item.category}</p>
+                      <p class="text-xs text-green-600 dark:text-green-400">{item.category}</p>
                     {/if}
                   </div>
                   {#if item.colors.length > 0}
                     <div class="flex shrink-0 flex-wrap justify-end gap-1">
                       {#each item.colors as c}
-                        <span class="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-800">♥ {c}</span>
+                        <span class="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-800 dark:bg-green-800 dark:text-green-200">♥ {c}</span>
                       {/each}
                     </div>
                   {/if}
@@ -427,7 +427,7 @@
         </section>
       {/if}
 
-      <p class="px-2 pb-6 text-center text-xs text-green-600">
+      <p class="px-2 pb-6 text-center text-xs text-green-600 dark:text-green-400 dark:text-green-400">
         Favorites are coming in the next step.
       </p>
     {/if}

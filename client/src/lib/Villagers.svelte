@@ -130,6 +130,14 @@
     return images.get(name) ?? null;
   }
 
+  // Tapping the header title is the one-tap "get back to the full list":
+  // clears the search text AND both filter pills (favorites / on island).
+  function clearSearchAndFilters() {
+    search.clear();
+    showFavorites = false;
+    showIsland = false;
+  }
+
   const PALETTE = [
     'bg-green-600',
     'bg-teal-600',
@@ -170,7 +178,14 @@
     <div class="mb-3 flex items-center justify-between gap-2">
       <div class="flex min-w-0 items-center gap-2">
         <ConnectionStatus />
-        <h1 class="text-xl font-bold text-green-800">Villagers</h1>
+        <button
+          type="button"
+          onclick={clearSearchAndFilters}
+          title="Clear search and filters"
+          class="rounded-lg px-1 text-xl font-bold text-green-800 transition-colors hover:text-green-600 focus:outline-none focus:ring-2 focus:ring-green-200"
+        >
+          Villagers
+        </button>
       </div>
       <div class="flex items-center gap-2">
         <button

@@ -54,5 +54,11 @@ export function createDebouncedQuery(minChars = 2, shrinkMs = DEFAULT_SHRINK_MS)
     cancel() {
       cancelTimer();
     },
+    /** Reset to the inactive state immediately (no debounce wait). */
+    clear() {
+      cancelTimer();
+      raw = '';
+      applied = '';
+    },
   };
 }

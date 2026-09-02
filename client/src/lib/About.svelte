@@ -59,9 +59,17 @@
   function onKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape' && about.open) dismissAbout();
   }
+
+  // Click outside the dialog closes it. Listens on the window instead of the
+  // backdrop so no non-interactive element needs a click handler.
+  function onPointerDown(e: PointerEvent) {
+    if (!about.open) return;
+    const modal = document.querySelector('[data-about-modal]');
+    if (modal && !modal.contains(e.target as Node)) dismissAbout();
+  }
 </script>
 
-<svelte:window onkeydown={onKeydown} />
+<svelte:window onkeydown={onKeydown} onpointerdown={onPointerDown} />
 
 {#if about.open}
   <div class="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4">
@@ -70,6 +78,7 @@
       role="dialog"
       aria-modal="true"
       aria-labelledby="about-title"
+      tabindex="-1"
       class="max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-2xl border border-green-200 bg-white p-6 shadow-lg"
     >
       <h2 id="about-title" class="mb-4 text-xl font-bold text-green-800">Welcome to ACNH Gift Tracker!</h2>

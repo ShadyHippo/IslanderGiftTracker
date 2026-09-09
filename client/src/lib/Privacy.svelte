@@ -61,8 +61,7 @@
         number</strong>, and the <strong>island notes you type into the
         app</strong> (favorite villagers, who lives on your island, and which
         gifts you've given). There are no passwords on this site. There is no
-        advertising, no tracking, and nothing is sold to anyone — the whole
-        point is that it's just a fun tool.
+        advertising, no tracking, and nothing is sold to anyone.
       </p>
     </section>
 
@@ -84,14 +83,14 @@
           <li>A <strong>permanent Google account number</strong> (not your email) that lets us recognize you next time, even if you change your email address later. This is unique to this service.</li>
         </ul>
         <p class="mb-3 text-sm leading-relaxed text-green-700 dark:text-green-300">
-          Google's permission screen also mentions “profile info” — that
+          Google's permission screen also mentions “profile info”. That
           <em>can</em> include your name and profile picture, but this site
           never looks at those and doesn't save them. We have no access to your
           Google password, your contacts, your files, your search history, or
           anything else in your Google account.
         </p>
         <p class="mb-3 text-sm leading-relaxed text-green-700 dark:text-green-300">
-          <strong>What about the “token”?</strong> The one-time sign-in code
+          <strong>What about the “token”?</strong> The one-time sign-in cookie
           Google issues is checked to make sure it's genuine and then thrown
           away. It is <strong>not saved</strong>, and after you sign
           in we cannot reach into your Google account, see your activity, or do
@@ -100,7 +99,7 @@
         </p>
         <p class="text-sm leading-relaxed text-green-700 dark:text-green-300">
           <strong>There are no passwords here.</strong> Not stored, not
-          “hashed”, not anything — this version of the site has no password
+          “hashed”, not anything. This version of the site has no password
           system at all.
         </p>
       </section>
@@ -112,7 +111,7 @@
         </p>
         <ul class="mb-3 list-disc space-y-1 pl-5 text-sm leading-relaxed text-green-700 dark:text-green-300">
           <li><strong>Your account</strong>: the Google account number and email address from section 1, plus the date you joined.</li>
-          <li><strong>Your island notebook</strong> — only the things <em>you</em> tick or type in the app:
+          <li><strong>Your island notebook</strong> only the things <em>you</em> tick or type in the app:
             <ul class="mt-1 list-disc space-y-0.5 pl-5">
               <li>which villagers you've marked as <strong>favorite</strong>,</li>
               <li>which villagers you've marked as <strong>on your island</strong>, and</li>
@@ -162,12 +161,12 @@
           Two honest footnotes about “deleted”:
         </p>
         <ul class="mb-3 list-disc space-y-1 pl-5 text-sm leading-relaxed text-green-700 dark:text-green-300">
-          <li>Because the app works offline, a copy of your island notebook also sits <strong>on your own device</strong> (in the browser's storage). Deleting your account doesn't reach into your phone — if you want that copy gone too, clear this site's data in your browser settings.</li>
+          <li>Because the app works offline, a copy of your island notebook also sits <strong>on your own device</strong> (in the browser's storage). Deleting your account doesn't reach into your phone. If you want that copy gone too, clear this site's data in your browser settings.</li>
           <li>If you'd rather keep it than delete it, use <strong>About → Download my data</strong> first: that saves your island notebook as a small file that belongs to you.</li>
         </ul>
         <p class="text-sm leading-relaxed text-green-700 dark:text-green-300">
           Because the whole project is open source, you can also download the
-          code and run your own copy on your own computer any time — your data
+          code and run your own copy on your own computer any time. Your data
           file works there too. The source is at
           <a
             href="https://github.com/ShadyHippo/IslanderGiftTracker"
@@ -179,7 +178,7 @@
       </section>
 
       <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-950">
-        <h2 class="mb-2 font-semibold text-green-900 dark:text-green-50">7. Staying signed in</h2>
+        <h2 class="mb-2 font-semibold text-green-900 dark:text-green-50">6. Staying signed in</h2>
         <p class="text-sm leading-relaxed text-green-700 dark:text-green-300">
           After you sign in, this site puts a small “session” cookie in your
           browser so you don't have to sign in again for up to 30 days. The key
@@ -301,7 +300,7 @@
       <h2 class="mb-2 font-semibold text-green-900 dark:text-green-50">What we don't do</h2>
       <ul class="list-disc space-y-1 pl-5 text-sm leading-relaxed text-green-700 dark:text-green-300">
         <li>No advertising, analytics, or tracking of any kind.</li>
-        <li>No selling, renting, or sharing your data — ever, with anyone.</li>
+        <li>No selling, renting, or sharing your data, ever, with anyone.</li>
         <li>No cookies except the single “stay signed in” one from section 6.</li>
       </ul>
     </section>

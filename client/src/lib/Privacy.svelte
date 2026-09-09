@@ -64,10 +64,6 @@
         advertising, no tracking, and nothing is sold to anyone — the whole
         point is that it's just a fun tool.
       </p>
-      <p class="text-sm leading-relaxed text-green-700 dark:text-green-300">
-        Everything below is written for normal people, not lawyers. This
-        specific version of the site is the one this page is served from.
-      </p>
     </section>
 
     {#if cfg === null}
@@ -84,28 +80,28 @@
           reads exactly two things and ignores everything else:
         </p>
         <ul class="mb-3 list-disc space-y-1 pl-5 text-sm leading-relaxed text-green-700 dark:text-green-300">
-          <li><strong>Your email address</strong> — this is also your username here. We never email you.</li>
-          <li>A <strong>permanent Google account number</strong> (not your email) that lets us recognize you next time, even if you change your email address later.</li>
+          <li><strong>Your email address</strong> this is also your username here. We never email you.</li>
+          <li>A <strong>permanent Google account number</strong> (not your email) that lets us recognize you next time, even if you change your email address later. This is unique to this service.</li>
         </ul>
         <p class="mb-3 text-sm leading-relaxed text-green-700 dark:text-green-300">
           Google's permission screen also mentions “profile info” — that
           <em>can</em> include your name and profile picture, but this site
           never looks at those and doesn't save them. We have no access to your
           Google password, your contacts, your files, your search history, or
-          anything else in your Google account. Ever.
+          anything else in your Google account.
         </p>
         <p class="mb-3 text-sm leading-relaxed text-green-700 dark:text-green-300">
           <strong>What about the “token”?</strong> The one-time sign-in code
           Google issues is checked to make sure it's genuine and then thrown
-          away immediately. It is <strong>not saved</strong>, and after you sign
+          away. It is <strong>not saved</strong>, and after you sign
           in we cannot reach into your Google account, see your activity, or do
           anything on your behalf. The only login key that exists afterwards is
-          this site's own “you're logged in” cookie, described in section 6.
+          this site's own “you're logged in” cookie.
         </p>
         <p class="text-sm leading-relaxed text-green-700 dark:text-green-300">
           <strong>There are no passwords here.</strong> Not stored, not
           “hashed”, not anything — this version of the site has no password
-          system at all. Your Google password stays with Google.
+          system at all.
         </p>
       </section>
 
@@ -124,31 +120,19 @@
             </ul>
           </li>
         </ul>
-        <p class="text-sm leading-relaxed text-green-700 dark:text-green-300">
-          That's the complete list. There is nothing else about you on the
-          server — no location, no contacts, no photos, no device info, no
-          browsing history.
-        </p>
       </section>
 
       <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-950">
         <h2 class="mb-2 font-semibold text-green-900 dark:text-green-50">3. Where your data lives, and who could see it</h2>
         <p class="mb-3 text-sm leading-relaxed text-green-700 dark:text-green-300">
-          This site is run by <strong>one person</strong> (a hobbyist — that's
-          me) on <strong>a server in their home</strong>. That person is the
+          This site is run by <strong>one person</strong> (me) on 
+          <strong>a server in their home</strong>. That person is the
           only one with access to the server and the files on it.
         </p>
         <p class="mb-3 text-sm leading-relaxed text-green-700 dark:text-green-300">
           The reference game info database (the villager catalog and pictures)
           are handed out through <strong>Cloudflare</strong>, a well-known
           content-delivery network, so the site loads quickly for everyone. 
-        </p>
-        <p class="text-sm leading-relaxed text-green-700 dark:text-green-300">
-          That is the entire list of parties involved: <strong>you, Google
-          (only at the moment of sign-in), Cloudflare (only as a traffic
-          relay), and me (the person who runs the server).</strong> There is no
-          advertising network, no analytics company, no data broker, and no
-          “sharing” — there is nothing to share and no one to share it with.
         </p>
       </section>
 
@@ -157,8 +141,7 @@
         <p class="mb-3 text-sm leading-relaxed text-green-700 dark:text-green-300">
           Yes. Free to use, no ads, no subscriptions, and no paid features now
           or planned. There is an optional <strong>“Buy me a coffee”</strong>
-          button for people who feel generous — it's a tip jar, it doesn't
-          unlock anything, and it has nothing to do with your data. If the site
+          button for people who feel generous, it doesn't unlock anything. If the site
           ever has to close down, the closure will be announced well in advance
           with clear instructions for everyone to download their data and self-host the service.
         </p>
@@ -173,8 +156,7 @@
           To delete it right now: open the app, go to <strong>About → Delete my
           account</strong>. One tap (plus a “are you sure?”) and the server
           immediately removes your account, your email address, and your island
-          notebook. There are no backups waiting in the wings — when it's
-          deleted, it's gone.
+          notebook. There are no backups, when it's deleted, it's gone.
         </p>
         <p class="mb-3 text-sm leading-relaxed text-green-700 dark:text-green-300">
           Two honest footnotes about “deleted”:
@@ -197,33 +179,11 @@
       </section>
 
       <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-950">
-        <h2 class="mb-2 font-semibold text-green-900 dark:text-green-50">6. What gets sent to the server, and encryption</h2>
-        <p class="mb-3 text-sm leading-relaxed text-green-700 dark:text-green-300">
-          Only your island notebook from section 2 is uploaded, and only when it
-          changes — a tiny file of a few dozen kilobytes. The big reference data catalog and
-          picture files are downloaded <em>to</em> your device, never uploaded.
-        </p>
-        <p class="mb-3 text-sm leading-relaxed text-green-700 dark:text-green-300">
-          <strong>In transit (while moving across the internet): encrypted.</strong>
-          Your browser talks to this site over HTTPS. 
-        </p>
-        <p class="text-sm leading-relaxed text-green-700 dark:text-green-300">
-          <strong>At rest (while sitting on the server): not encrypted.</strong>
-          The files on my home server are not
-          encrypted, like a notebook on a shelf in a house. I could read them —
-          I'd see the email you signed up with and the villagers/gifts you've
-          logged — and so could anyone else with access to that machine, which
-          is no one. I don't go reading people's notebooks, because there is
-          nothing to gain from it, but I won't pretend it's impossible.
-        </p>
-      </section>
-
-      <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-950">
         <h2 class="mb-2 font-semibold text-green-900 dark:text-green-50">7. Staying signed in</h2>
         <p class="text-sm leading-relaxed text-green-700 dark:text-green-300">
           After you sign in, this site puts a small “session” cookie in your
           browser so you don't have to sign in again for up to 30 days. The key
-          behind it lives only in the server's memory — it isn't written to the
+          behind it lives only in the server's memory. It isn't written to the
           hard drive, and it's wiped automatically when it expires or when the
           server restarts (which would just mean signing in again). It's the
           only cookie this site uses.
@@ -342,7 +302,7 @@
       <ul class="list-disc space-y-1 pl-5 text-sm leading-relaxed text-green-700 dark:text-green-300">
         <li>No advertising, analytics, or tracking of any kind.</li>
         <li>No selling, renting, or sharing your data — ever, with anyone.</li>
-        <li>No cookies except the single “stay signed in” one from section 7.</li>
+        <li>No cookies except the single “stay signed in” one from section 6.</li>
       </ul>
     </section>
 

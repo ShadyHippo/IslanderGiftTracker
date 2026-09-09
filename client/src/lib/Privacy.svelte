@@ -139,14 +139,9 @@
           only one with access to the server and the files on it.
         </p>
         <p class="mb-3 text-sm leading-relaxed text-green-700 dark:text-green-300">
-          The big, boring reference files (the villager catalog and pictures)
+          The reference game info database (the villager catalog and pictures)
           are handed out through <strong>Cloudflare</strong>, a well-known
-          content-delivery network, so the site loads quickly for everyone. To
-          be completely open about it: internet traffic to this site passes
-          through Cloudflare's network, so in theory Cloudflare is in the chain
-          and could see traffic as it flows by. Cloudflare does not store your
-          account or your island data — those live only on my home server — and
-          we don't send them anything on purpose.
+          content-delivery network, so the site loads quickly for everyone. 
         </p>
         <p class="text-sm leading-relaxed text-green-700 dark:text-green-300">
           That is the entire list of parties involved: <strong>you, Google
@@ -165,15 +160,14 @@
           button for people who feel generous — it's a tip jar, it doesn't
           unlock anything, and it has nothing to do with your data. If the site
           ever has to close down, the closure will be announced well in advance
-          with clear instructions for everyone to download their data.
+          with clear instructions for everyone to download their data and self-host the service.
         </p>
       </section>
 
       <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-950">
         <h2 class="mb-2 font-semibold text-green-900 dark:text-green-50">5. How long we keep it, and how to delete it</h2>
         <p class="mb-3 text-sm leading-relaxed text-green-700 dark:text-green-300">
-          Your data is kept until <strong>you delete it</strong>, or until the
-          site itself stops running.
+          Your data is kept until <strong>you delete it</strong>
         </p>
         <p class="mb-3 text-sm leading-relaxed text-green-700 dark:text-green-300">
           To delete it right now: open the app, go to <strong>About → Delete my
@@ -203,22 +197,20 @@
       </section>
 
       <section class="rounded-xl border border-green-200 bg-white p-5 dark:border-green-800 dark:bg-green-950">
-        <h2 class="mb-2 font-semibold text-green-900 dark:text-green-50">6. What gets sent to the server, and encryption (the honest version)</h2>
+        <h2 class="mb-2 font-semibold text-green-900 dark:text-green-50">6. What gets sent to the server, and encryption</h2>
         <p class="mb-3 text-sm leading-relaxed text-green-700 dark:text-green-300">
           Only your island notebook from section 2 is uploaded, and only when it
-          changes — a tiny file of a few dozen kilobytes. The big catalog and
+          changes — a tiny file of a few dozen kilobytes. The big reference data catalog and
           picture files are downloaded <em>to</em> your device, never uploaded.
         </p>
         <p class="mb-3 text-sm leading-relaxed text-green-700 dark:text-green-300">
           <strong>In transit (while moving across the internet): encrypted.</strong>
-          Your browser talks to this site over HTTPS, the same padlock you see
-          on any secure website. It's scrambled while it travels, so someone
-          snooping on the network can't read it.
+          Your browser talks to this site over HTTPS. 
         </p>
         <p class="text-sm leading-relaxed text-green-700 dark:text-green-300">
           <strong>At rest (while sitting on the server): not encrypted.</strong>
-          The honest way to say this: the files on my home server are not
-          scrambled, like a notebook on a shelf in a house. I could read them —
+          The files on my home server are not
+          encrypted, like a notebook on a shelf in a house. I could read them —
           I'd see the email you signed up with and the villagers/gifts you've
           logged — and so could anyone else with access to that machine, which
           is no one. I don't go reading people's notebooks, because there is
@@ -302,7 +294,7 @@
           there are no hidden backup copies.
         </p>
         <p class="mb-3 text-sm leading-relaxed text-green-700 dark:text-green-300">
-          Two honest footnotes about “deleted”:
+          Two notes about “deleted”:
         </p>
         <ul class="mb-3 list-disc space-y-1 pl-5 text-sm leading-relaxed text-green-700 dark:text-green-300">
           <li>A copy of your notebook also sits <strong>on your own device</strong> for offline use; clear this site's data in your browser settings to remove that too.</li>
@@ -325,7 +317,7 @@
         </p>
         <p class="text-sm leading-relaxed text-green-700 dark:text-green-300">
           <strong>At rest (while sitting on the server): not encrypted.</strong>
-          The honest way to say this: your username and island notebook sit as
+          Your username and island notebook sit as
           ordinary files on the server's disk, readable by whoever runs it. Your
           password is the exception — it's only ever stored as the one-way
           fingerprint described in section 1, which can't be unscrambled.

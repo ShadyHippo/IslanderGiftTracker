@@ -64,8 +64,7 @@
           href="/privacy"
           class="font-medium text-green-700 underline decoration-dotted hover:text-green-900 dark:text-green-300 dark:hover:text-green-50"
         >privacy policy</a>
-        for exactly what is stored. Backups on the server are kept for a limited
-        window and pruned automatically.
+        for exactly what is stored.
       </p>
     </section>
 

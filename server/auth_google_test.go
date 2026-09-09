@@ -195,6 +195,91 @@ func doGoogleLogin(t *testing.T, h http.Handler) (string, string) {
 
 // --- tests ------------------------------------------------------------------
 
+// TestGoogleStartReusesValidState pins the fix for the intermittent
+// "Sign-in could not be verified" failures: a racing duplicate of /start
+// (browser prefetch / preload, impatient second tap) must REUSE the browser's
+// still-valid state token instead of minting a second one, so the state cookie
+// and the authorize URL can never disagree.
+func TestGoogleStartReusesValidState(t *testing.T) {
+	idp := newFakeIdP(t)
+	idp.claims = defaultClaims("", "sub-race", "race@gmail.com")
+	_, h := newTestGoogleServer(t, idp)
+
+	mint := func(withCookie *http.Cookie) (*http.Response, *http.Cookie) {
+		start := httptest.NewRequest("GET", "/api/auth/google/start", nil)
+		start.Header.Set("X-Forwarded-Proto", "https")
+		if withCookie != nil {
+			start.AddCookie(withCookie)
+		}
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, start)
+		var state *http.Cookie
+		for _, c := range w.Result().Cookies() {
+			if c.Name == oauthStateCookie {
+				state = c
+			}
+		}
+		return w.Result(), state
+	}
+
+	res1, state1 := mint(nil)
+	if res1.StatusCode != http.StatusFound || state1 == nil || state1.Value == "" {
+		t.Fatal("first start: want 302 with state cookie")
+	}
+
+	// The duplicate start arrives carrying the already-issued cookie.
+	res2, state2 := mint(state1)
+	if res2.StatusCode != http.StatusFound {
+		t.Fatalf("duplicate start: want 302, got %d", res2.StatusCode)
+	}
+	if state2 == nil || state2.Value != state1.Value {
+		t.Fatalf("duplicate start must reuse the same state token; got %v, want kept", stateCookieDesc(state2))
+	}
+	auth2, err := url.Parse(res2.Header.Get("Location"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := auth2.Query().Get("state"); got != state1.Value {
+		t.Fatalf("authorize URL must carry the reused state; got %q want %q", got, stateCookieDesc(state1))
+	}
+
+	// The flow still completes end-to-end with the reused token.
+	cb := httptest.NewRequest("GET", "/api/auth/google/callback?code=good-code&state="+url.QueryEscape(state1.Value), nil)
+	cb.Header.Set("X-Forwarded-Proto", "https")
+	cb.AddCookie(state1)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, cb)
+	if w.Result().StatusCode != http.StatusFound {
+		t.Fatalf("callback after reused state: want 302, got %d body=%s", w.Code, w.Body.String())
+	}
+	var session *http.Cookie
+	for _, c := range w.Result().Cookies() {
+		if c.Name == sessionCookie && c.Value != "" {
+			session = c
+		}
+	}
+	if session == nil {
+		t.Fatal("expected session after sign-in with a reused state token")
+	}
+	// Starting over (cookie already cleared by the callback) must mint a NEW
+	// token, not pick up the consumed one.
+	res3, state3 := mint(nil)
+	if res3.StatusCode != http.StatusFound || state3 == nil || state3.Value == "" {
+		t.Fatal("fresh start after callback: want 302 with state cookie")
+	}
+	if state3.Value == state1.Value {
+		t.Fatal("fresh start should mint a fresh token")
+	}
+}
+
+// stateCookieDesc renders a state cookie for test-failure messages.
+func stateCookieDesc(c *http.Cookie) string {
+	if c == nil || c.Value == "" {
+		return "<empty>"
+	}
+	return c.Value[:8] + "…"
+}
+
 func TestGoogleSignupCreatesAccount(t *testing.T) {
 	idp := newFakeIdP(t)
 	idp.claims = defaultClaims("", "sub-123", "Daisy@gmail.com")
@@ -334,12 +419,8 @@ func TestDeleteAccountRemovesEverything(t *testing.T) {
 	}
 	username := "gone@gmail.com"
 	prog := filepath.Join(s.progDir, username+".db")
-	backup := filepath.Join(s.backupDir(), username+"-20260821-000000.db")
-	_ = os.MkdirAll(s.backupDir(), 0o755)
-	for _, f := range []string{prog, backup} {
-		if err := os.WriteFile(f, []byte("x"), 0o644); err != nil {
-			t.Fatal(err)
-		}
+	if err := os.WriteFile(prog, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
 	}
 
 	req := httptest.NewRequest("DELETE", "/api/account", nil)
@@ -351,9 +432,6 @@ func TestDeleteAccountRemovesEverything(t *testing.T) {
 	}
 	if _, err := os.Stat(prog); !os.IsNotExist(err) {
 		t.Error("progress file survived deletion")
-	}
-	if _, err := os.Stat(backup); !os.IsNotExist(err) {
-		t.Error("backup survived deletion")
 	}
 	var count int
 	_ = s.usersDB.QueryRow("SELECT COUNT(*) FROM users").Scan(&count)

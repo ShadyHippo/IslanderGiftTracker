@@ -40,7 +40,7 @@
     if (deleting) return;
     const msg =
       'Delete your account PERMANENTLY?\n\n' +
-      'This wipes your gift log and all server backups of it. ' +
+      'This wipes your gift log on this device and on the server. ' +
       'Download your data first if you want to keep a copy.';
     if (!confirm(msg)) return;
     if (!confirm('Last chance — this cannot be undone. Delete?')) return;
@@ -200,7 +200,7 @@
         <p class="mt-2 text-xs leading-relaxed text-green-700 dark:text-green-300">
           Clearing your browser's site data deletes the offline copies on this
           device. Anything already synced is safe on the server; unsaved edits
-          would be lost. The server also keeps recent backups of your data.
+          would be lost.
         </p>
         {#if session.user && progress.status === 'ready'}
           <button

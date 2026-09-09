@@ -71,11 +71,12 @@ func main() {
 
 	refDir := env("REF_DIR", filepath.Join(cfg.dataDir, "ref"))
 	progDir := filepath.Join(cfg.dataDir, "progress")
-	for _, d := range []string{cfg.dataDir, refDir, progDir, filepath.Join(progDir, "backups")} {
+	for _, d := range []string{cfg.dataDir, refDir, progDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			log.Fatalf("mkdir %s: %v", d, err)
 		}
 	}
+	removeLegacyBackups(progDir)
 
 	usersDB, err := sql.Open("sqlite", dsn(filepath.Join(cfg.dataDir, "users.db")))
 	if err != nil {
@@ -172,7 +173,6 @@ func newMux(s *server) *http.ServeMux {
 	mux.HandleFunc("GET /api/me", s.requireAuth(s.handleMe))
 	mux.HandleFunc("GET /api/progress", s.requireAuth(s.handleGetProgress))
 	mux.HandleFunc("PUT /api/progress", s.requireAuth(s.handlePutProgress))
-	mux.HandleFunc("GET /api/progress/versions", s.requireAuth(s.handleProgressVersions))
 	mux.HandleFunc("GET /db/manifest.json", s.handleManifest)
 	mux.HandleFunc("GET /db/{filename}", s.handleRefDownload)
 	mux.HandleFunc("GET /img/manifest.json", s.handleImageManifest)
@@ -196,6 +196,29 @@ func loginRateWindow() time.Duration {
 		v = 15
 	}
 	return time.Duration(v) * time.Minute
+}
+
+// removeLegacyBackups deletes the per-user versioned backup copies that older
+// builds kept under progress/backups. Each user's current db is untouched, so
+// this frees disk without touching live data. Removed silently if absent.
+func removeLegacyBackups(progDir string) {
+	dir := filepath.Join(progDir, "backups")
+	if _, err := os.Stat(dir); err != nil {
+		return
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		log.Printf("legacy backups dir unreadable (%s): %v", dir, err)
+		return
+	}
+	n := 0
+	for _, e := range entries {
+		if os.Remove(filepath.Join(dir, e.Name())) == nil {
+			n++
+		}
+	}
+	_ = os.Remove(dir) // remove the dir itself if now empty
+	log.Printf("removed %d legacy progress backups from %s", n, dir)
 }
 
 // dsn builds a modernc.org/sqlite DSN with pragmas.

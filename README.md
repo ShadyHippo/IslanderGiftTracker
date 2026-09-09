@@ -42,7 +42,7 @@ host by default):
 ```
 data/
 ├── users.db      # accounts (< 1 MB)
-├── progress/     # one SQLite gift log per user, plus timestamped backups
+├── progress/     # one SQLite gift log per user (no other copies)
 └── ...           # (reference data ships inside the image, not in /data)
 ```
 
@@ -94,7 +94,7 @@ Behavior in this mode:
 - Signup is open: first sign-in *is* account creation (an existing account
   with the same verified email gets linked instead).
 - Users can delete themselves — About → *Delete my account* removes their
-  identity, gift log, and backups immediately.
+  identity and gift log immediately.
 - Google rejects non-HTTPS origins, so this mode needs real TLS in front
   (any reverse proxy or tunnel works).
 
@@ -121,8 +121,8 @@ Two kinds of SQLite, mirrored between server and client:
   and full offline mode possible. Alongside it sits an image tree of ~21k
   WebP files (~900 MB).
 - **`progress.db`** (one writable db per user) — just the gift log and villager
-  tags, a few KB. Auto-saves to the server and IndexedDB; the server keeps
-  timestamped backups so mistakes can be undone.
+  tags, a few KB. Auto-saves to the server and IndexedDB; one copy per user,
+  no extra server-side backup copies.
 
 ## Dev setup
 

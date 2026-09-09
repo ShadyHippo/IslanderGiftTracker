@@ -54,7 +54,7 @@ export function authConfig(): Promise<AuthConfig> {
   return request<AuthConfig>('/api/auth/config');
 }
 
-/** Permanently removes the account: progress, backups, user row, session. */
+/** Permanently removes the account: progress db, user row, session. */
 export function deleteAccount(): Promise<{ ok: boolean }> {
   return request<{ ok: boolean }>('/api/account', { method: 'DELETE' });
 }
@@ -73,7 +73,7 @@ async function errorText(res: Response): Promise<string> {
   return `Request failed (${res.status})`;
 }
 
-/** Download the current user's progress db (raw sqlite bytes — their single backup file). */
+/** Download the current user's progress db (raw sqlite bytes — the one file holding their data). */
 export async function progressDownload(): Promise<ArrayBuffer> {
   let res: Response;
   try {
@@ -85,7 +85,7 @@ export async function progressDownload(): Promise<ArrayBuffer> {
   return await res.arrayBuffer();
 }
 
-/** Upload the user's progress db (raw sqlite bytes). Server keeps versioned backups. */
+/** Upload the user's progress db (raw sqlite bytes) — the server keeps exactly one copy per user. */
 export async function progressUpload(bytes: Uint8Array): Promise<{ ok: string; username: string }> {
   let res: Response;
   try {

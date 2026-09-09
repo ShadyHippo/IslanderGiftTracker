@@ -11,7 +11,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -357,7 +356,7 @@ func (s *server) handleLogout(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleDeleteAccount removes the caller's account entirely: session, progress
-// file, versioned backups, user row. Self-serve in both auth modes.
+// file, user row. Self-serve in both auth modes.
 func (s *server) handleDeleteAccount(w http.ResponseWriter, r *http.Request) {
 	username := usernameFrom(r.Context())
 	if username == "" {
@@ -372,10 +371,6 @@ func (s *server) handleDeleteAccount(w http.ResponseWriter, r *http.Request) {
 	if err := os.Remove(s.progressPath(username)); err != nil && !os.IsNotExist(err) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not delete progress data"})
 		return
-	}
-	backups, _ := filepath.Glob(filepath.Join(s.backupDir(), username+"-*.db"))
-	for _, b := range backups {
-		os.Remove(b)
 	}
 	res, err := s.usersDB.Exec("DELETE FROM users WHERE username = ?", username)
 	if err != nil {

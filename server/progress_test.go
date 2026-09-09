@@ -2,10 +2,8 @@ package main
 
 import (
 	"database/sql"
-	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"testing"
 )
 
@@ -84,26 +82,17 @@ func TestEnsureProgressDB(t *testing.T) {
 	}
 }
 
-func TestPruneBackups(t *testing.T) {
+// TestNoBackupsOnReupload pins the one-db-per-user policy: re-uploading the
+// progress db must never spawn versioned backup copies next to it.
+func TestNoBackupsOnReupload(t *testing.T) {
 	dir := t.TempDir()
-	s := &server{progDir: dir}
-	backupDir := s.backupDir()
-	if err := os.MkdirAll(backupDir, 0o755); err != nil {
+	path := filepath.Join(dir, "testuser.db")
+	if err := os.WriteFile(path, makeValidDB(t), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < maxBackups+10; i++ {
-		name := filepath.Join(backupDir, fmt.Sprintf("testuser-20260101-%06d.db", i))
-		if err := os.WriteFile(name, []byte("x"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	s.pruneBackups("testuser")
-	matches, _ := filepath.Glob(filepath.Join(backupDir, "testuser-*.db"))
-	if len(matches) != maxBackups {
-		t.Fatalf("expected %d backups kept, got %d", maxBackups, len(matches))
-	}
-	sort.Strings(matches)
-	if filepath.Base(matches[0]) != "testuser-20260101-000010.db" {
-		t.Fatalf("oldest backups should have been pruned first, first kept = %q", filepath.Base(matches[0]))
+	// The old build would have written dir/backups/testuser-<ts>.db here.
+	matches, _ := filepath.Glob(filepath.Join(dir, "*", "*.db"))
+	if len(matches) != 0 {
+		t.Fatalf("no backup copies should exist, found: %v", matches)
 	}
 }

@@ -200,6 +200,12 @@ func (o *oauthClient) verifyState(v string) (*oauthState, error) {
 }
 
 func (o *oauthClient) setStateCookie(w http.ResponseWriter, r *http.Request, value string) {
+	// An empty value means "clear": MaxAge -1 so no stale empty cookie can
+	// linger and confuse a later start (it used to be re-armed for 10 min).
+	maxAge := int(oauthStateTTL.Seconds())
+	if value == "" {
+		maxAge = -1
+	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     oauthStateCookie,
 		Value:    value,
@@ -207,7 +213,7 @@ func (o *oauthClient) setStateCookie(w http.ResponseWriter, r *http.Request, val
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 		Secure:   o.cfg.secureCookies && isHTTPS(r),
-		MaxAge:   int(oauthStateTTL.Seconds()),
+		MaxAge:   maxAge,
 	})
 }
 
@@ -242,17 +248,39 @@ func (s *server) handleAuthConfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, cfg)
 }
 
+// oauthFail redirects the browser back to the login form with a human message
+// and a stable machine-readable reason (second query param) so future reports
+// pinpoint the exact failing step.
+func (s *server) oauthFail(w http.ResponseWriter, r *http.Request, ip, reason, msg string) {
+	log.Printf("google oauth fail from %s %s: %s (%s)", ip, r.URL.Path, reason, msg)
+	http.Redirect(w, r, "/?login_error="+url.QueryEscape(msg)+"&reason="+reason, http.StatusFound)
+}
+
+// handleGoogleStart begins the OIDC dance. It is IDEMPOTENT: if the browser
+// already holds a valid, unexpired state token, the same token is reused and
+// re-armed. Racing duplicates of this navigation (a browser prefetch, an
+// impatient second tap while the server wakes up, a preload that slipped
+// through) must not mint a second token — two tokens would leave the cookie
+// holding one state while Google echoes back the other, and the callback
+// fails with "could not be verified". Reusing keeps every copy in agreement.
 func (s *server) handleGoogleStart(w http.ResponseWriter, r *http.Request) {
 	ip := clientIP(r)
 	if !s.loginLimit.allow(ip) {
-		http.Redirect(w, r, "/?login_error="+url.QueryEscape("Too many attempts — try again later."), http.StatusFound)
+		s.oauthFail(w, r, ip, "rate_limited", "Too many attempts — try again later.")
 		return
 	}
 	prov, err := s.oauth.providerFor("")
 	if err != nil {
 		log.Printf("google start: discovery failed: %v", err)
-		http.Redirect(w, r, "/?login_error="+url.QueryEscape("Sign-in is temporarily unavailable."), http.StatusFound)
+		s.oauthFail(w, r, ip, "provider_down", "Sign-in is temporarily unavailable.")
 		return
+	}
+	if c, err := r.Cookie(oauthStateCookie); err == nil {
+		if st, verr := s.oauth.verifyState(c.Value); verr == nil {
+			s.oauth.setStateCookie(w, r, c.Value)
+			s.startGoogleAuth(w, r, prov, st.Redirect, c.Value)
+			return
+		}
 	}
 	redirectURL := s.googleRedirectURL(r)
 	tok, err := s.oauth.signState(oauthState{
@@ -264,7 +292,13 @@ func (s *server) handleGoogleStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.oauth.setStateCookie(w, r, tok)
+	s.startGoogleAuth(w, r, prov, redirectURL, tok)
+}
 
+// startGoogleAuth sends the authorize redirect for a (fresh or reused) state
+// token. redirectURL must be the URL encoded INSIDE the token, so the token
+// exchange at the callback replays exactly what was authorized.
+func (s *server) startGoogleAuth(w http.ResponseWriter, r *http.Request, prov *oidcProvider, redirectURL, tok string) {
 	q := url.Values{
 		"client_id":     {s.cfg.googleClientID},
 		"redirect_uri":  {redirectURL},
@@ -275,71 +309,73 @@ func (s *server) handleGoogleStart(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, prov.AuthorizationEndpoint+"?"+q.Encode(), http.StatusFound)
 }
 
+// handleGoogleCallback verifies the state cookie, exchanges the code, issues
+// the session cookie and sends the user back into the app.
 func (s *server) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	ip := clientIP(r)
 	if !s.loginLimit.allow(ip) {
-		http.Redirect(w, r, "/?login_error="+url.QueryEscape("Too many attempts — try again later."), http.StatusFound)
+		s.oauthFail(w, r, ip, "rate_limited", "Too many attempts — try again later.")
 		return
 	}
-	fail := func(msg string) {
-		log.Printf("google callback from %s: %s", ip, msg)
-		http.Redirect(w, r, "/?login_error="+url.QueryEscape(msg), http.StatusFound)
+	fail := func(reason, msg string) {
+		s.oauthFail(w, r, ip, reason, msg)
 	}
 
 	c, err := r.Cookie(oauthStateCookie)
 	if err != nil {
-		fail("Sign-in session lost — try again.")
+		fail("state_missing", "Sign-in session lost — try again.")
 		return
 	}
 	state, err := s.oauth.verifyState(c.Value)
 	if err != nil {
-		fail("Sign-in link expired — try again.")
+		fail("state_invalid", "Sign-in link expired — try again.")
 		return
 	}
 	// The cookie is scoped to /api/auth/google/; expire it now either way.
 	s.oauth.setStateCookie(w, r, "")
 
 	if r.URL.Query().Get("state") != c.Value {
-		fail("Sign-in could not be verified — try again.")
+		fail("state_mismatch", "Sign-in could not be verified — try again.")
 		return
 	}
 	code := r.URL.Query().Get("code")
 	if code == "" {
-		fail("Google did not approve sign-in.")
+		fail("no_code", "Google did not approve sign-in.")
 		return
 	}
 	prov, err := s.oauth.providerFor("")
 	if err != nil {
-		fail("Sign-in is temporarily unavailable.")
+		fail("provider_down", "Sign-in is temporarily unavailable.")
 		return
 	}
 
 	idToken, err := exchangeCode(prov.TokenEndpoint, code, state.Redirect, s.cfg.googleClientID, s.cfg.googleClientSecret)
 	if err != nil {
-		fail("Could not complete sign-in with Google.")
+		log.Printf("google token exchange failed: %v", err)
+		fail("exchange_failed", "Could not complete sign-in with Google.")
 		return
 	}
 	kid := jwtHeaderKid(idToken)
 	prov, err = s.oauth.providerFor(kid) // refresh JWKS if the key rotated
 	if err != nil {
-		fail("Sign-in is temporarily unavailable.")
+		fail("provider_down", "Sign-in is temporarily unavailable.")
 		return
 	}
 	claims, err := validateIDToken(idToken, kid, prov.keys[kid], s.cfg.googleIssuer, s.cfg.googleClientID)
 	if err != nil {
 		log.Printf("google id_token rejected: %v", err)
-		fail("Google sign-in could not be verified.")
+		fail("token_invalid", "Google sign-in could not be verified.")
 		return
 	}
 	username, err := findOrCreateGoogleUser(s.usersDB, claims.Sub, claims.Email)
 	if err != nil {
 		log.Printf("google account resolution sub=%q email=%q: %v", claims.Sub, claims.Email, err)
-		fail("Could not create your account.")
+		fail("account_error", "Could not create your account.")
 		return
 	}
 	tok, err := s.sessions.create(username)
 	if err != nil {
-		fail("Server error — try again.")
+		fail("session_error", "Server error — try again.")
 		return
 	}
 	s.setSessionCookie(w, r, tok)

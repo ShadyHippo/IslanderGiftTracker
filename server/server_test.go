@@ -29,7 +29,7 @@ func newTestServer(t *testing.T, staticDir string) *httptest.Server {
 		progDir:    filepath.Join(dataDir, "progress"),
 		loginLimit: newLoginLimiter(100, time.Minute),
 	}
-	for _, d := range []string{srv.refDir, srv.progDir, srv.backupDir()} {
+	for _, d := range []string{srv.refDir, srv.progDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -178,7 +178,7 @@ func TestProgressFlow(t *testing.T) {
 	io.Copy(io.Discard, r.Body)
 	r.Body.Close()
 
-	// Second upload creates a backup.
+	// Second upload replaces the file; no versioned backups are kept.
 	r = put(valid)
 	if r.StatusCode != 200 {
 		t.Fatalf("second upload: %d, want 200", r.StatusCode)
@@ -191,8 +191,8 @@ func TestProgressFlow(t *testing.T) {
 	vr, _ := ts.Client().Do(req)
 	vb, _ := io.ReadAll(vr.Body)
 	vr.Body.Close()
-	if !strings.Contains(string(vb), `"versions":[`) || strings.Contains(string(vb), `"versions":[]`) {
-		t.Fatalf("versions should list one backup: %s", vb)
+	if vr.StatusCode != http.StatusNotFound {
+		t.Fatalf("versions endpoint should be gone, got %d: %s", vr.StatusCode, vb)
 	}
 }
 

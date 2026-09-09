@@ -70,20 +70,20 @@ self.addEventListener('fetch', (event) => {
   // offline, which would overwrite the client's newer IndexedDB copy during a
   // reload. The client falls back to its own IDB copy when this fails (503).
   if (url.pathname.startsWith('/api/')) {
-    event.respondWith(networkOnly(request));
+    event.respondWith(networkOnly(request, event));
     return;
   }
 
   // Version check: network-only, no cache at all. The client fetches this on
   // startup to detect missed SW updates — must be fast and fresh.
   if (url.pathname === '/version.txt') {
-    event.respondWith(networkOnly(request));
+    event.respondWith(networkOnly(request, event));
     return;
   }
 
   // Health ping: network-only, never touches Cache Storage.
   if (url.pathname === '/health') {
-    event.respondWith(networkOnly(request));
+    event.respondWith(networkOnly(request, event));
     return;
   }
 
@@ -118,7 +118,7 @@ self.addEventListener('fetch', (event) => {
   // stale-while-revalidate opened caches.match() on EVERY unmatched request,
   // which on iOS with a large image cache added hundreds of ms to health
   // pings, manifest checks, etc.
-  event.respondWith(networkOnly(request));
+  event.respondWith(networkOnly(request, event));
 });
 
 // Navigate handler — uses the cached SHELL_CACHE handle so we never call
@@ -175,7 +175,25 @@ async function netFirstWriteCache(request, cacheName) {
   }
 }
 
-async function networkOnly(request) {
+async function networkOnly(request, event) {
+  // Navigations (e.g. the OAuth start/callback round-trip) come with a
+  // navigation-preload request the browser already fired in parallel with SW
+  // boot. We MUST consume it instead of issuing our own fetch(request): doing
+  // both sends the URL TWICE to the server. For /api/auth/google/start each
+  // copy mints a DIFFERENT OAuth state token and each response sets the state
+  // cookie — the two Set-Cookie writes race, and the authorize URL can end up
+  // carrying a state that no longer matches the cookie. The callback then
+  // fails with "Sign-in could not be verified" at random. Prefer the preload,
+  // fall back to our own request.
+  if (request.mode === 'navigate') {
+    let pre;
+    try {
+      pre = await event?.preloadResponse;
+    } catch {
+      /* preload unavailable/failed: fall through to a fresh fetch */
+    }
+    if (pre) return pre;
+  }
   try {
     // cache:'no-store' forces a real network request so the browser can't
     // serve a stale disk-cached response while offline.

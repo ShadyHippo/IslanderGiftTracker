@@ -77,6 +77,7 @@ func main() {
 		}
 	}
 	removeLegacyBackups(progDir)
+	removeStaleUploads(progDir)
 
 	usersDB, err := sql.Open("sqlite", dsn(filepath.Join(cfg.dataDir, "users.db")))
 	if err != nil {
@@ -115,7 +116,21 @@ func main() {
 	}
 
 	addr := ":" + cfg.port
-	httpSrv := &http.Server{Addr: addr, Handler: securityHeaders(newMux(srv), cfg.secureCookies)}
+	httpSrv := &http.Server{
+		Addr:    addr,
+		Handler: securityHeaders(newMux(srv), cfg.secureCookies),
+		// Bound the resources a single client can pin. Before this, a client
+		// could open connections and dribble headers forever (Slowloris) and
+		// send up to Go's 1 MB default header budget.
+		ReadHeaderTimeout: 10 * time.Second,
+		// Generous enough for a 64 MB progress upload on a phone, short
+		// enough that a slow-body sender cannot hold a connection for hours.
+		ReadTimeout:    10 * time.Minute,
+		IdleTimeout:    2 * time.Minute,
+		MaxHeaderBytes: 64 << 10,
+		// No WriteTimeout on purpose: /db/*.gz and /img/images.zip are large
+		// downloads that legitimately take minutes on a slow link.
+	}
 	log.Printf("acnh server listening on %s (data: %s)", addr, cfg.dataDir)
 	if err := httpSrv.ListenAndServe(); err != nil {
 		log.Fatal(err)
@@ -138,6 +153,26 @@ func (c config) validate() error {
 	}
 }
 
+// inlineThemeScriptSHA256 is the CSP hash of the blocking theme script in
+// client/index.html (it must run before first paint, so it cannot be a module).
+// Regenerate after editing that script:
+//
+//	python3 - <<'EOF'
+//	import re,hashlib,base64
+//	s=re.search(r'<script>(.*?)</script>',open('client/index.html').read(),re.S).group(1)
+//	print("sha256-"+base64.b64encode(hashlib.sha256(s.encode()).digest()).decode())
+//	EOF
+const inlineThemeScriptSHA256 = "sha256-QO/KBO203LKwpnSkOm4/0OLVPKJNWAU+bSQH8Brysms="
+
+// contentSecurityPolicy locks the SPA to same-origin resources. 'wasm-unsafe-eval'
+// is required by sql.js; the quoted hash admits only the inline theme bootstrap.
+const contentSecurityPolicy = "default-src 'self'; " +
+	"script-src 'self' '" + inlineThemeScriptSHA256 + "' 'wasm-unsafe-eval'; " +
+	"style-src 'self' 'unsafe-inline'; " +
+	"img-src 'self' blob: data:; " +
+	"font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; " +
+	"frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'"
+
 // securityHeaders stamps baseline hardening headers on every response. HSTS
 // rides on SECURE_COOKIES: both only make sense once the site is served over
 // public HTTPS (Cloudflare terminates TLS in front of this process).
@@ -147,6 +182,8 @@ func securityHeaders(next http.Handler, secure bool) http.Handler {
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		h.Set("Content-Security-Policy", contentSecurityPolicy)
+		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()")
 		if secure {
 			h.Set("Strict-Transport-Security", "max-age=31536000")
 		}
@@ -256,4 +293,28 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+// removeStaleUploads deletes partially-written upload files (and their SQLite
+// sidecars) left behind by a crash or a failed PUT. `<user>.db.uploading*` is
+// never live data: a successful upload is renamed to `<user>.db` and a failed
+// one is removed, so at boot anything left with that name is garbage. Older
+// builds left these next to the real database forever.
+func removeStaleUploads(progDir string) {
+	entries, err := os.ReadDir(progDir)
+	if err != nil {
+		return
+	}
+	n := 0
+	for _, e := range entries {
+		if e.IsDir() || !strings.Contains(e.Name(), ".uploading") {
+			continue
+		}
+		if os.Remove(filepath.Join(progDir, e.Name())) == nil {
+			n++
+		}
+	}
+	if n > 0 {
+		log.Printf("removed %d stale upload files from %s", n, progDir)
+	}
 }

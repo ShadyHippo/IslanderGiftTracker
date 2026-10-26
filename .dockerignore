@@ -17,6 +17,8 @@ __pycache__/
 cont_maki.sh
 .git/
 node_modules/
+**/node_modules/
 client/dist/
+**/dist/
 client/.pnpm-store/
 tests/

@@ -34,7 +34,7 @@ func newTestServer(t *testing.T, staticDir string) *httptest.Server {
 			t.Fatal(err)
 		}
 	}
-	ts := httptest.NewServer(newMux(srv))
+	ts := httptest.NewServer(securityHeaders(newMux(srv), false))
 	t.Cleanup(ts.Close)
 	return ts
 }
@@ -228,5 +228,77 @@ func TestLoginRateLimit(t *testing.T) {
 	}
 	if statuses[2] != http.StatusTooManyRequests {
 		t.Fatalf("third should be 429, got %v", statuses)
+	}
+}
+
+func TestSecurityHeadersPresent(t *testing.T) {
+	ts := newTestServer(t, filepath.Join(t.TempDir(), "nonexistent"))
+	resp, err := http.Get(ts.URL + "/health")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	csp := resp.Header.Get("Content-Security-Policy")
+	for _, want := range []string{"default-src 'self'", "script-src 'self'", "sha256-", "'wasm-unsafe-eval'", "frame-ancestors 'none'", "object-src 'none'"} {
+		if !strings.Contains(csp, want) {
+			t.Errorf("CSP missing %q: %q", want, csp)
+		}
+	}
+	if got := resp.Header.Get("X-Frame-Options"); got != "DENY" {
+		t.Errorf("X-Frame-Options = %q", got)
+	}
+	if got := resp.Header.Get("Permissions-Policy"); got == "" {
+		t.Error("Permissions-Policy missing")
+	}
+}
+
+// Unmatched /api/* must 404 rather than render the SPA shell with a 200.
+func TestUnknownAPIRouteIs404(t *testing.T) {
+	staticDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(staticDir, "index.html"), []byte("<!doctype html><title>t</title>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ts := newTestServer(t, staticDir)
+	resp, err := http.Post(ts.URL+"/api/does-not-exist", "application/json", strings.NewReader(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("unknown API route = %d, want 404", resp.StatusCode)
+	}
+	// Deep links still get the shell.
+	resp2, err := http.Get(ts.URL + "/villager/ace")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp2.Body.Close()
+	if resp2.StatusCode != http.StatusOK {
+		t.Fatalf("SPA deep link = %d, want 200", resp2.StatusCode)
+	}
+}
+
+// Authenticated responses carry per-user data and must never be cached.
+func TestAuthenticatedResponsesAreNoStore(t *testing.T) {
+	ts := newTestServer(t, filepath.Join(t.TempDir(), "nonexistent"))
+	resp, _ := login(t, ts, "testuser", "testpass")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("login = %d", resp.StatusCode)
+	}
+	jar := make(map[string]string)
+	for _, c := range resp.Cookies() {
+		jar[c.Name] = c.Value
+	}
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/me", nil)
+	for k, v := range jar {
+		req.AddCookie(&http.Cookie{Name: k, Value: v})
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if got := res.Header.Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("Cache-Control = %q, want no-store", got)
 	}
 }

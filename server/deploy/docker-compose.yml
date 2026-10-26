@@ -12,9 +12,9 @@ services:
       DATA_DIR: /data
       STATIC_DIR: /app/client/dist
       SECURE_COOKIES: "true"
-      # Comma-separated user:password, applied ONLY on first start (empty users table).
-      # Or use: docker compose run --rm acnh -set-password <user> -password <pass>
-      ACNH_INIT_USERS: "wife:CHANGE_ME,hippo:CHANGE_ME"
+      # First-boot accounts are OPT-IN: uncomment and set your own, or run
+      #   docker compose run --rm acnh -set-password <user> -password <pass>
+      # ACNH_INIT_USERS: "alice:CHANGE_ME,bob:CHANGE_ME"
     volumes:
       - acnh-data:/data
 

@@ -5,7 +5,7 @@
 # image; everything else comes from the host.
 # NOTE: deliberately NO `# syntax=` directive — that pulls a frontend image
 # from Docker Hub on every build and breaks offline/when DNS flakes.
-FROM golang:1.25-alpine AS server
+FROM golang:1.27-alpine AS server
 WORKDIR /src
 COPY server/go.mod server/go.sum ./
 RUN go mod download
@@ -23,7 +23,7 @@ ARG GIT_HASH=dev
 RUN GIT_HASH=$GIT_HASH pnpm build
 
 # ── Stage 3: Final image ────────────────────────────────────────────
-FROM alpine:3.20
+FROM alpine:3.24
 RUN adduser -D -H -u 10001 acnh && apk add --no-cache python3 curl
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD curl -fsS http://127.0.0.1:8080/health >/dev/null || exit 1
 COPY --from=server /out/acnh-server /usr/local/bin/acnh-server

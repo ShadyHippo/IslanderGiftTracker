@@ -133,11 +133,61 @@ func TestSessionStoreLifecycle(t *testing.T) {
 func TestClientIP(t *testing.T) {
 	r := &http.Request{RemoteAddr: "192.168.1.50:5555"}
 	if got := clientIP(r); got != "192.168.1.50" {
-		t.Fatalf("no XFF: got %q", got)
+		t.Fatalf("no proxy headers: got %q", got)
 	}
+	// X-Forwarded-For is attacker-controlled: Cloudflare and SWAG both append
+	// to it, so its first hop is whatever the client sent. It must be ignored.
 	r.Header = http.Header{}
 	r.Header.Set("X-Forwarded-For", "203.0.113.7, 10.0.0.1")
+	if got := clientIP(r); got != "192.168.1.50" {
+		t.Fatalf("XFF must be ignored: got %q", got)
+	}
+	// Cloudflare overwrites CF-Connecting-IP.
+	r.Header.Set("CF-Connecting-IP", "203.0.113.7")
 	if got := clientIP(r); got != "203.0.113.7" {
-		t.Fatalf("with XFF: got %q", got)
+		t.Fatalf("CF-Connecting-IP: got %q", got)
+	}
+	// SWAG overwrites X-Real-IP.
+	r.Header.Del("CF-Connecting-IP")
+	r.Header.Set("X-Real-IP", "198.51.100.4")
+	if got := clientIP(r); got != "198.51.100.4" {
+		t.Fatalf("X-Real-IP: got %q", got)
+	}
+	// Garbage must not become a limiter key.
+	r.Header.Set("X-Real-IP", "not-an-ip")
+	if got := clientIP(r); got != "192.168.1.50" {
+		t.Fatalf("invalid proxy header should fall back: got %q", got)
+	}
+}
+
+func TestUsernamesCannotEscapeProgressDir(t *testing.T) {
+	bad := []string{"", ".", "..", "a/b", `a\b`, "../etc/passwd", "a\x00b", strings.Repeat("x", 255)}
+	for _, u := range bad {
+		if err := validUsername(u); err == nil {
+			t.Errorf("validUsername(%q) should fail", u)
+		}
+	}
+	good := []string{"alice", "mabel-2", "someone@example.com", "a.b_c-d"}
+	for _, u := range good {
+		if err := validUsername(u); err != nil {
+			t.Errorf("validUsername(%q): %v", u, err)
+		}
+	}
+}
+
+// A Google-only account has a NULL password_hash. That must read as a normal
+// mismatch (401) rather than blowing up the scan with a 500.
+func TestVerifyNullPasswordHashIsMismatch(t *testing.T) {
+	db := tempUsersDB(t)
+	if _, err := db.Exec("INSERT INTO users (username, password_hash, google_sub, email, created_at) VALUES (?, NULL, ?, ?, ?)",
+		"g@example.com", "sub-1", "g@example.com", "now"); err != nil {
+		t.Fatal(err)
+	}
+	_, ok, err := verifyUser(db, "g@example.com", "anything")
+	if err != nil {
+		t.Fatalf("NULL hash should not error: %v", err)
+	}
+	if ok {
+		t.Fatal("NULL hash must never authenticate")
 	}
 }

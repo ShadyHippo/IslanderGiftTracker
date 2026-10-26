@@ -75,7 +75,12 @@ export default defineConfig({
     },
   ],
   server: {
-    host: true,
+    // Loopback only by default. This used to be `host: true`, which — combined
+    // with the Makefile's `docker run --network host` — published the dev
+    // server on every host interface. Vite's dev server serves files from disk
+    // and can spawn an editor, so it must not be reachable from the LAN unless
+    // deliberately opted in (VITE_DEV_HOST=0.0.0.0 pnpm dev).
+    host: process.env.VITE_DEV_HOST ?? '127.0.0.1',
     port: 5173,
     proxy: {
       // Dev: client in container, Go API on the host.

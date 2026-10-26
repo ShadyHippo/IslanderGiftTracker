@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # ── Stage 1: Go server ──────────────────────────────────────────────
-FROM golang:1.25-alpine AS server
+FROM golang:1.27-alpine AS server
 WORKDIR /src
 COPY server/go.mod server/go.sum ./
 RUN go mod download
@@ -27,7 +27,7 @@ COPY res/ res/
 RUN --mount=type=cache,target=/build/cache python3 scripts/build_db.py --out-dir /out/ref
 
 # ── Stage 4: Final image ───────────────────────────────────────────
-FROM alpine:3.20
+FROM alpine:3.24
 RUN adduser -D -H -u 10001 acnh && apk add --no-cache python3 curl
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD curl -fsS http://127.0.0.1:8080/health >/dev/null || exit 1
 COPY --from=server /out/acnh-server /usr/local/bin/acnh-server

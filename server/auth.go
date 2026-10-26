@@ -10,7 +10,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -26,6 +25,10 @@ const (
 	// input at 72 bytes, so longer passwords would be compared only by their
 	// first 72 bytes. Reject them up front instead of storing a footgun.
 	maxPasswordLen = 64
+	// maxSessions bounds the in-memory session table. Sessions are only
+	// removed on logout or expiry (hourly sweep), so without a cap repeated
+	// logins would grow the map forever.
+	maxSessions = 10000
 )
 
 // dummyHash is a bcrypt hash used only to equalize response timing when a
@@ -108,8 +111,8 @@ func migrateUsersSchema(db *sql.DB) error {
 
 func createUser(db *sql.DB, username, password string) error {
 	username = strings.ToLower(strings.TrimSpace(username))
-	if username == "" {
-		return errors.New("username must not be empty")
+	if err := validUsername(username); err != nil {
+		return err
 	}
 	if err := validatePassword(password); err != nil {
 		return err
@@ -127,8 +130,8 @@ func createUser(db *sql.DB, username, password string) error {
 // Used by the on-server admin flag -set-password.
 func upsertUser(db *sql.DB, username, password string) error {
 	username = strings.ToLower(strings.TrimSpace(username))
-	if username == "" {
-		return errors.New("username must not be empty")
+	if err := validUsername(username); err != nil {
+		return err
 	}
 	if err := validatePassword(password); err != nil {
 		return err
@@ -164,12 +167,36 @@ func validatePassword(password string) error {
 	return nil
 }
 
+// validUsername rejects names that cannot safely be a filename component:
+// each account's gift log lives at progress/<username>.db, so separators or
+// dot-dot would turn a login into a path traversal.
+func validUsername(username string) error {
+	if username == "" {
+		return errors.New("username must not be empty")
+	}
+	if len(username) > 254 {
+		return errors.New("username too long (max 254 bytes)")
+	}
+	if username == "." || username == ".." {
+		return errors.New("username is not a valid name")
+	}
+	if strings.ContainsAny(username, `/\`+"\x00") {
+		return errors.New("username contains invalid characters")
+	}
+	for _, r := range username {
+		if r < 0x20 || r == 0x7f {
+			return errors.New("username contains control characters")
+		}
+	}
+	return nil
+}
+
 // verifyUser checks credentials case-insensitively and returns the canonical
 // (stored) username on success, so sessions and progress files always use the
 // same spelling ("Mabel" and "mabel" are the same user).
 func verifyUser(db *sql.DB, username, password string) (string, bool, error) {
 	var stored string
-	var hash string
+	var hash sql.NullString
 	err := db.QueryRow("SELECT username, password_hash FROM users WHERE lower(username) = lower(?)",
 		username).Scan(&stored, &hash)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -181,7 +208,14 @@ func verifyUser(db *sql.DB, username, password string) (string, bool, error) {
 	if err != nil {
 		return "", false, err
 	}
-	if bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) != nil {
+	// Google-only accounts have no password hash. Treat them as a normal
+	// failed login (401), not a 500 — and burn the same bcrypt time so they
+	// are indistinguishable from a wrong password.
+	if !hash.Valid {
+		_ = bcrypt.CompareHashAndPassword(dummyHash, []byte(password))
+		return "", false, nil
+	}
+	if bcrypt.CompareHashAndPassword([]byte(hash.String), []byte(password)) != nil {
 		return "", false, nil
 	}
 	return stored, true, nil
@@ -224,9 +258,29 @@ func (s *sessionStore) create(username string) (string, error) {
 	}
 	tok := hex.EncodeToString(buf)
 	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.sessions) >= maxSessions {
+		s.evictOldestLocked()
+	}
 	s.sessions[tok] = session{username: username, expiresAt: s.now().Add(sessionTTL)}
-	s.mu.Unlock()
 	return tok, nil
+}
+
+// evictOldestLocked drops the session expiring soonest to make room for a new
+// one. Only hit at the cap; it is the difference between "one user gets logged
+// out early" and "the process runs out of memory". Caller holds mu.
+func (s *sessionStore) evictOldestLocked() {
+	var oldestTok string
+	var oldest time.Time
+	first := true
+	for tok, sess := range s.sessions {
+		if first || sess.expiresAt.Before(oldest) {
+			oldestTok, oldest, first = tok, sess.expiresAt, false
+		}
+	}
+	if !first {
+		delete(s.sessions, oldestTok)
+	}
 }
 
 func (s *sessionStore) get(tok string) (string, bool) {
@@ -272,9 +326,12 @@ func (s *server) setSessionCookie(w http.ResponseWriter, r *http.Request, tok st
 	})
 }
 
-// requireAuth wraps a handler with session verification.
+// requireAuth wraps a handler with session verification. Every authenticated
+// response is per-user data (identity, gift log), so none of it may be stored
+// by a browser or an intermediary cache.
 func (s *server) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
 		c, err := r.Cookie(sessionCookie)
 		if err != nil {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "not logged in"})
@@ -329,15 +386,17 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"username": canonical})
 }
 
-// clientIP returns the real client IP. Behind SWAG the server is only reachable
-// from the proxy, so the first X-Forwarded-For hop is trustworthy.
+// clientIP returns the real client IP. Only headers that the edge proxy
+// OVERWRITES are trusted: Cloudflare sets CF-Connecting-IP, SWAG sets X-Real-IP.
+// X-Forwarded-For is deliberately ignored — both proxies *append* to it, so its
+// first hop is whatever the client sent. Trusting it let anyone mint a fresh
+// rate-limit bucket (and a permanent limiter map entry) per request.
 func clientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		if i := strings.IndexByte(xff, ','); i >= 0 {
-			xff = xff[:i]
-		}
-		if xff = strings.TrimSpace(xff); xff != "" {
-			return xff
+	for _, h := range []string{"CF-Connecting-IP", "X-Real-IP"} {
+		if v := strings.TrimSpace(r.Header.Get(h)); v != "" {
+			if ip := net.ParseIP(v); ip != nil {
+				return ip.String()
+			}
 		}
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
@@ -368,7 +427,12 @@ func (s *server) handleDeleteAccount(w http.ResponseWriter, r *http.Request) {
 	}
 	// Progress data first: if the user row delete fails we'd rather have an
 	// orphan row than orphaned personal files.
-	if err := os.Remove(s.progressPath(username)); err != nil && !os.IsNotExist(err) {
+	path, perr := s.progressPath(username)
+	if perr != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not resolve progress data"})
+		return
+	}
+	if err := removeProgressArtifacts(path); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not delete progress data"})
 		return
 	}

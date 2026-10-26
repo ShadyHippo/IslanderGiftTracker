@@ -85,7 +85,9 @@ async function idbGet(): Promise<{ version: number; sha: string; bytes: ArrayBuf
   }
 
 async function fetchManifest(): Promise<RefManifest> {
-  const res = await fetch('/db/manifest.json', { cache: 'no-store' });
+  // default (ETag + short max-age): the body is either served from cache or
+  // answered with a 304, so a repeat boot costs no bytes.
+  const res = await fetch('/db/manifest.json', { cache: 'default' });
   if (!res.ok) throw new Error(`manifest request failed (${res.status})`);
   return (await res.json()) as RefManifest;
 }
@@ -95,9 +97,10 @@ async function download(
   expectedSize: number,
   onProgress: (fraction: number) => void,
 ): Promise<ArrayBuffer> {
-  // no-store: IndexedDB is our cache; never let the browser's HTTP cache serve
-  // stale bytes for a URL whose content can change under the same version.
-  const res = await fetch(url, { cache: 'no-store' });
+  // The URL is content-addressed (…db.gz?h=<sha256>), so the HTTP/edge cache
+  // can serve it safely: same URL, same bytes. IndexedDB stays the fast path
+  // across launches; this only saves the first-visit download per device.
+  const res = await fetch(url, { cache: 'default' });
   if (!res.ok) throw new Error(`reference db download failed (${res.status})`);
   if (!res.body) return await res.arrayBuffer();
   // Content-Length may be missing (chunked/proxied responses) — fall back to
@@ -185,7 +188,7 @@ export async function loadReferenceDb(): Promise<void> {
       gz = cached.bytes;
     } else {
       state.status = 'downloading';
-      gz = await download(`/db/${entry.file}`, entry.size, (f) => {
+      gz = await download(`/db/${entry.file}?h=${encodeURIComponent(entry.sha256)}`, entry.size, (f) => {
         state.progress = Math.round(f * 100);
       });
       state.downloaded = true;

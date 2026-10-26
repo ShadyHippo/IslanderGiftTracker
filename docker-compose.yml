@@ -8,7 +8,10 @@ services:
     container_name: acnh
     restart: unless-stopped
     ports:
-      - "2109:8080"
+      # Loopback only by default. Publish to 0.0.0.0 only if you really intend
+      # to expose the origin: behind SWAG/Cloudflare the proxy reaches the
+      # container over the Docker network (http://acnh:8080), not this port.
+      - "127.0.0.1:2109:8080"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
       interval: 30s
@@ -27,8 +30,9 @@ services:
       # AUTH_MODE: "google"
       # GOOGLE_CLIENT_ID: "xxxx.apps.googleusercontent.com"
       # GOOGLE_CLIENT_SECRET: "GOCSPX-..."
-      # Comma-separated user:password, applied ONLY on first start (empty users table).
-      # Or use: docker compose run --rm acnh -set-password <user> -password <pass>
-      ACNH_INIT_USERS: "testuser:CHANGE_ME"
+      # First-boot accounts are OPT-IN. Never ship a known password: uncomment
+      # and choose your own, or run:
+      #   docker compose run --rm acnh -set-password <user> -password <pass>
+      # ACNH_INIT_USERS: "alice:CHANGE_ME"
     volumes:
       - ./data:/data

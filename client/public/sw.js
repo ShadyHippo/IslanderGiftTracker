@@ -87,9 +87,13 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // DB files: network-first, write to DB_CACHE on success.
-  if (url.pathname.startsWith('/db/')) {
-    event.respondWith(netFirstWriteCache(request, DB_CACHE));
+  // DB files + the image manifest: network-first, write to DB_CACHE on
+  // success. Content-addressed DB URLs (…?h=<sha256>) are immutable, so they
+  // are served cache-first instead: a repeat boot then costs zero bytes.
+  if (url.pathname.startsWith('/db/') || url.pathname === '/img/manifest.json') {
+    event.respondWith(
+      url.searchParams.has('h') ? cacheFirst(request, DB_CACHE) : netFirstWriteCache(request, DB_CACHE),
+    );
     return;
   }
 
@@ -153,6 +157,38 @@ async function navigateFetch(event) {
     return fresh;
   }
   return new Response('Offline', { status: 503 });
+}
+
+// cache-first for content-addressed URLs: a hit issues no network request at
+// all. A miss fetches, stores, and drops older versions of the same path so
+// superseded builds do not accumulate in Cache Storage.
+async function cacheFirst(request, cacheName) {
+  const cache = await getCache(cacheName);
+  const cached = await cache.match(request);
+  if (cached) return cached;
+  try {
+    const response = await fetch(request);
+    if (response.ok) {
+      await cache.put(request, response.clone());
+      await pruneOtherVersions(cache, request.url);
+    }
+    return response;
+  } catch {
+    return new Response('Offline', { status: 503 });
+  }
+}
+
+async function pruneOtherVersions(cache, keepUrl) {
+  const keep = new URL(keepUrl);
+  const keys = await cache.keys();
+  await Promise.all(
+    keys
+      .filter((k) => {
+        const u = new URL(k.url);
+        return u.pathname === keep.pathname && u.search !== keep.search;
+      })
+      .map((k) => cache.delete(k)),
+  );
 }
 
 // network-first with cache write: fetches from network, writes to the

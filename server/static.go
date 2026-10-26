@@ -24,6 +24,12 @@ func spaHandler(dir string) http.Handler {
 	}
 	fs := http.FileServer(http.Dir(dir))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Unmatched API routes must not fall through to index.html: a typo or a
+		// removed endpoint should look like the 404 it is, not a 200 page.
+		if strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/db/") {
+			http.NotFound(w, r)
+			return
+		}
 		path := filepath.Join(dir, filepath.Clean(r.URL.Path))
 		// SPA fallback: unknown routes serve index.html (unless the path has a file extension).
 		if st, err := os.Stat(path); err != nil || st.IsDir() {

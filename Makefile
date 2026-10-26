@@ -1,4 +1,4 @@
-.PHONY: build-db server-run server-build client-install client-dev client-build docker createuser
+.PHONY: build-db server-run server-build vulncheck client-install client-dev client-build docker createuser
 
 # Rebuild the reference database from the xlsx (+ dodo.ac images)
 build-db:
@@ -11,6 +11,10 @@ server-run:
 # Build the Go server binary
 server-build:
 	cd server && CGO_ENABLED=0 go build -trimpath -o bin/acnh-server .
+
+# Dependency + stdlib vulnerability scan for the server (needs network once).
+vulncheck:
+	cd server && go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
 # Client — node/pnpm run ONLY inside containers (host stays clean).
 # $$(...) = expanded by the shell at runtime; $(...) would be eaten by make.

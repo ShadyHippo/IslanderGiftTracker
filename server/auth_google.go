@@ -45,6 +45,12 @@ type oauthClient struct {
 	provider *oidcProvider // discovery doc + JWKS cache, refreshed hourly
 }
 
+// oauthHTTPTimeout bounds every call to the IdP. Without it a stalled
+// connection pinned a handler goroutine indefinitely.
+const oauthHTTPTimeout = 10 * time.Second
+
+var oauthHTTPClient = &http.Client{Timeout: oauthHTTPTimeout}
+
 func newOAuthClient(cfg config) *oauthClient {
 	return &oauthClient{cfg: cfg}
 }
@@ -59,14 +65,18 @@ type oidcProvider struct {
 }
 
 // providerFor returns the cached discovery doc + JWKS, refreshing after an
-// hour or when a signature key id is unknown (key rotation).
+// hour or when a signature key id is unknown (key rotation). Network I/O
+// happens OUTSIDE the lock so one slow IdP response cannot stall every other
+// login handler.
 func (o *oauthClient) providerFor(needKeyID string) (*oidcProvider, error) {
 	o.mu.Lock()
-	defer o.mu.Unlock()
 	p := o.provider
 	if p != nil && time.Since(p.fetched) < time.Hour && (needKeyID == "" || p.keys[needKeyID] != nil) {
+		o.mu.Unlock()
 		return p, nil
 	}
+	o.mu.Unlock()
+
 	var disc struct {
 		AuthorizationEndpoint string `json:"authorization_endpoint"`
 		TokenEndpoint         string `json:"token_endpoint"`
@@ -83,18 +93,21 @@ func (o *oauthClient) providerFor(needKeyID string) (*oidcProvider, error) {
 		return nil, err
 	}
 	now := time.Now()
-	o.provider = &oidcProvider{
+	refreshed := &oidcProvider{
 		AuthorizationEndpoint: disc.AuthorizationEndpoint,
 		TokenEndpoint:         disc.TokenEndpoint,
 		JWKSURI:               disc.JWKSURI,
 		keys:                  keys,
 		fetched:               now,
 	}
-	return o.provider, nil
+	o.mu.Lock()
+	o.provider = refreshed
+	o.mu.Unlock()
+	return refreshed, nil
 }
 
 func httpGetJSON(rawurl string, v any) error {
-	res, err := http.Get(rawurl) //nolint:gosec — URLs come from our config/discovery, not user input
+	res, err := oauthHTTPClient.Get(rawurl) //nolint:gosec — URLs come from our config/discovery, not user input
 	if err != nil {
 		return err
 	}
@@ -124,6 +137,11 @@ func fetchJWKS(jwksURI string) (map[string]*rsa.PublicKey, error) {
 		}
 		n, err := base64.RawURLEncoding.DecodeString(k.N)
 		if err != nil {
+			continue
+		}
+		// Ignore absurdly large moduli (a hostile JWKS could otherwise force a
+		// multi-megabyte big.Int); 1024 bytes is 8192 bits, far above any real key.
+		if len(n) > 1024 {
 			continue
 		}
 		e, err := base64.RawURLEncoding.DecodeString(k.E)
@@ -263,12 +281,13 @@ func (s *server) oauthFail(w http.ResponseWriter, r *http.Request, ip, reason, m
 // through) must not mint a second token — two tokens would leave the cookie
 // holding one state while Google echoes back the other, and the callback
 // fails with "could not be verified". Reusing keeps every copy in agreement.
+//
+// There is deliberately no rate limit here: this endpoint holds no secret and
+// checks no credential, it only mints a signed state cookie and redirects to
+// Google. The cost worth bounding is the token exchange in the callback, which
+// makes an outbound request on the caller's behalf.
 func (s *server) handleGoogleStart(w http.ResponseWriter, r *http.Request) {
 	ip := clientIP(r)
-	if !s.loginLimit.allow(ip) {
-		s.oauthFail(w, r, ip, "rate_limited", "Too many attempts — try again later.")
-		return
-	}
 	prov, err := s.oauth.providerFor("")
 	if err != nil {
 		log.Printf("google start: discovery failed: %v", err)
@@ -311,6 +330,12 @@ func (s *server) startGoogleAuth(w http.ResponseWriter, r *http.Request, prov *o
 
 // handleGoogleCallback verifies the state cookie, exchanges the code, issues
 // the session cookie and sends the user back into the app.
+//
+// The limiter here exists for one reason: a callback that gets far enough to
+// call exchangeCode makes an outbound HTTPS request to Google carrying whatever
+// code the caller supplied. Failures of that exchange are counted, so a caller
+// cannot use this endpoint as a free amplifier against Google (or hold
+// connections open) indefinitely.
 func (s *server) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	ip := clientIP(r)
 	if !s.loginLimit.allow(ip) {
@@ -351,6 +376,7 @@ func (s *server) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 
 	idToken, err := exchangeCode(prov.TokenEndpoint, code, state.Redirect, s.cfg.googleClientID, s.cfg.googleClientSecret)
 	if err != nil {
+		s.loginLimit.recordFailure(ip)
 		log.Printf("google token exchange failed: %v", err)
 		fail("exchange_failed", "Could not complete sign-in with Google.")
 		return
@@ -394,7 +420,13 @@ func exchangeCode(tokenEndpoint, code, redirectURI, clientID, clientSecret strin
 		"redirect_uri":  {redirectURI},
 		"grant_type":    {"authorization_code"},
 	}
-	res, err := http.PostForm(tokenEndpoint, form) //nolint:noctx — one-shot server-side call during login
+	req, err := http.NewRequest(http.MethodPost, tokenEndpoint, strings.NewReader(form.Encode()))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+	res, err := oauthHTTPClient.Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -518,8 +550,8 @@ func validateIDToken(token, kid string, key *rsa.PublicKey, wantIss, wantAud str
 // password account, or creates a new account whose username is the email.
 func findOrCreateGoogleUser(db *sql.DB, sub, email string) (string, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
-	if email == "" {
-		return "", errors.New("empty email")
+	if err := validUsername(email); err != nil {
+		return "", fmt.Errorf("unusable email as username: %w", err)
 	}
 	var uname string
 	err := db.QueryRow("SELECT username FROM users WHERE google_sub = ?", sub).Scan(&uname)

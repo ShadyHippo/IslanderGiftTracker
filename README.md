@@ -30,8 +30,10 @@ docker compose up -d --build
 
 The first build downloads ~1 GB of source images from Nookipedia and converts
 them to WebP, then everything is baked into the image — no external services or
-files needed at runtime. The container serves HTTP on port 8080 (mapped to host
-port 2109 in the default `docker-compose.yml`).
+files needed at runtime. The container serves HTTP on port 8080, published to
+`127.0.0.1:2109` by the default `docker-compose.yml` — loopback only, so the
+origin is not reachable from the LAN or the internet behind your proxy's back.
+There are no default accounts: create one explicitly (see below).
 
 ## Hosting & authentication
 
@@ -68,7 +70,53 @@ environment:
 ```
 
 Works over plain HTTP, so it's fine behind a LAN IP with no TLS setup. Failed
-logins are rate-limited per IP.
+logins are rate-limited per IP (the client address is taken from the header your
+edge proxy *overwrites* — `CF-Connecting-IP` or `X-Real-IP` — never from
+`X-Forwarded-For`, which clients can pad).
+
+### Security notes
+
+- Every response carries `Content-Security-Policy` (same-origin scripts, styles,
+  images; `frame-ancestors 'none'`), `X-Content-Type-Options: nosniff`,
+  `X-Frame-Options: DENY` and a `Referrer-Policy`; HSTS is added when
+  `SECURE_COOKIES=true`. If you edit the inline theme script in
+  `client/index.html`, regenerate the hash constant in `server/main.go`
+  (the command is in the comment above it) or that script will be blocked.
+- Credentials and gift logs are per-user and sent with `Cache-Control: no-store`.
+- The image bundle and reference DB are public on purpose (the PWA installs
+  before sign-in); everything account-scoped requires a session.
+- Run `govulncheck ./...` from `server/` after dependency bumps, and keep the
+  `golang:`/`alpine:` base images on a supported release.
+
+### Caching on a small uplink
+
+Almost all bytes are static, so the goal is to serve them from the edge and
+never from the origin twice. What the app already does:
+
+| Path | Policy | Why |
+|---|---|---|
+| `/assets/*` | `immutable`, 1 year | Vite content-hashed filenames |
+| `/img/<cat>/<file>` | `immutable`, 1 year | image files never change |
+| `/img/images.zip?h=<hash>` | 7 days + 30 days stale-while-revalidate | ~120 MB bundle, hash-pinned URL |
+| `/db/reference.vN.db.gz?h=<sha256>` | `immutable`, 1 year | URL pins the exact bytes |
+| `/db/manifest.json` | 60 s + ETag + SWR | freshness oracle, tiny |
+| `/img/manifest.json` | 5 min + ETag + SWR | ~900 KB, read on every boot |
+| `/api/*` | `no-store` | per-user data |
+| `index.html`, `sw.js` | `no-cache` (revalidate) | must pick up deploys |
+
+Two things that only the Cloudflare dashboard can do, because Cloudflare does
+not cache **JSON or `.wasm`** by default regardless of headers:
+
+1. **Caching → Cache Rules**, in this order:
+   - *Bypass cache* when `http.request.uri.path` starts with `/api/`
+   - *Eligible for cache* when the path starts with `/img/`, `/db/` or
+     `/assets/` — leave Edge TTL at "respect origin headers"
+2. **Caching → Configuration → Browser Cache TTL** → *Respect Existing Headers*
+   (the default rewrites `Cache-Control` to ~4 h, which caps the immutable
+   assets).
+
+Optional: *Tiered Cache* keeps the bundle at more edges; *Cache Reserve* (paid)
+keeps it on disk for months. Both matter mostly for the one 120 MB file.
 
 ### Google mode
 

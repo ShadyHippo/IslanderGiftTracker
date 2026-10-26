@@ -22,8 +22,13 @@ const progressTemplate = `CREATE TABLE IF NOT EXISTS gifts (
 	created_at TEXT NOT NULL
 );`
 
-func (s *server) progressPath(username string) string {
-	return filepath.Join(s.progDir, username+".db")
+// progressPath resolves a user's gift log. The username is validated first so a
+// corrupt or hand-edited users.db can never escape progDir through the path.
+func (s *server) progressPath(username string) (string, error) {
+	if err := validUsername(username); err != nil {
+		return "", err
+	}
+	return filepath.Join(s.progDir, username+".db"), nil
 }
 
 // ensureProgressDB creates an empty progress database if none exists yet.
@@ -44,7 +49,11 @@ func (s *server) ensureProgressDB(path string) error {
 
 func (s *server) handleGetProgress(w http.ResponseWriter, r *http.Request) {
 	username := usernameFrom(r.Context())
-	path := s.progressPath(username)
+	path, err := s.progressPath(username)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid account name"})
+		return
+	}
 	if err := s.ensureProgressDB(path); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not create progress db"})
 		return
@@ -55,7 +64,11 @@ func (s *server) handleGetProgress(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) handlePutProgress(w http.ResponseWriter, r *http.Request) {
 	username := usernameFrom(r.Context())
-	final := s.progressPath(username)
+	final, err := s.progressPath(username)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid account name"})
+		return
+	}
 
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxUploadBytes))
 	if err != nil {
@@ -75,9 +88,16 @@ func (s *server) handlePutProgress(w http.ResponseWriter, r *http.Request) {
 	// Integrity check via PRAGMA quick_check before accepting.
 	if ok, err := quickCheck(tmp); err != nil || ok != "ok" {
 		os.Remove(tmp)
+		cleanSQLiteSidecars(tmp)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "sqlite integrity check failed"})
 		return
 	}
+	// quickCheck opens the upload with SQLite, which leaves -wal/-shm files
+	// next to it for a WAL-mode database. The rename only moves the main file,
+	// so those would be orphaned forever (and a stale -wal next to the live db
+	// is worse than clutter: SQLite would try to replay it).
+	cleanSQLiteSidecars(tmp)
+	cleanSQLiteSidecars(final)
 
 	// Atomic replace: the upload already passed quick_check, so the only
 	// window where data could be lost is a rename failure — and then the
@@ -88,6 +108,27 @@ func (s *server) handlePutProgress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "true", "username": username})
+}
+
+// cleanSQLiteSidecars removes the journal companions SQLite creates beside a
+// database. Best-effort: a missing file is not an error.
+func cleanSQLiteSidecars(dbPath string) {
+	for _, suffix := range []string{"-wal", "-shm"} {
+		_ = os.Remove(dbPath + suffix)
+	}
+}
+
+// removeProgressArtifacts deletes a user's gift log plus every companion a
+// failed upload or a SQLite open can leave behind.
+func removeProgressArtifacts(path string) error {
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	cleanSQLiteSidecars(path)
+	for _, suffix := range []string{".uploading", ".uploading-wal", ".uploading-shm"} {
+		_ = os.Remove(path + suffix)
+	}
+	return nil
 }
 
 // validSQLite checks the SQLite magic header.

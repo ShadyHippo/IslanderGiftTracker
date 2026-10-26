@@ -61,7 +61,10 @@ func TestQuickCheck(t *testing.T) {
 
 func TestEnsureProgressDB(t *testing.T) {
 	s := &server{progDir: t.TempDir()}
-	path := s.progressPath("testuser")
+	path, err := s.progressPath("testuser")
+	if err != nil {
+		t.Fatalf("progressPath: %v", err)
+	}
 	if err := s.ensureProgressDB(path); err != nil {
 		t.Fatalf("ensure: %v", err)
 	}

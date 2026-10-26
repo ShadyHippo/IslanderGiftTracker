@@ -97,8 +97,12 @@ function concatChunks(chunks: Uint8Array[]): Uint8Array {
 export async function checkInstall(): Promise<void> {
   try {
     const [dbRes, imgRes] = await Promise.all([
-      fetch('/db/manifest.json', { cache: 'no-store' }),
-      fetch('/img/manifest.json', { cache: 'no-store' }),
+      // 'default' (not 'no-store'): both manifests are ~KB-MB of build
+      // metadata and carry ETags, so the browser/edge cache answers instantly
+      // and revalidates in the background. Forcing no-store made every boot
+      // pull the ~900 KB image manifest from the origin.
+      fetch('/db/manifest.json', { cache: 'default' }),
+      fetch('/img/manifest.json', { cache: 'default' }),
     ]);
     if (!dbRes.ok || !imgRes.ok) {
       // Server unreachable (or no bundle published): nothing to offer — an
@@ -225,7 +229,14 @@ export async function runInstall(): Promise<void> {
     for (let attempt = 0; ; attempt++) {
       const headers: Record<string, string> = {};
       if (received > 0) headers.range = `bytes=${received}-`;
-      const res = await fetch('/img/images.zip', { headers, cache: 'no-store' });
+      // Pin the manifest hash in the URL: the bundle then has a stable cache
+      // key and the edge can hold it for a week instead of re-pulling ~120 MB
+      // from the origin after every short TTL. Falls back to the bare URL
+      // (short TTL) if the hash is somehow unknown.
+      const zipUrl = currentHash
+        ? `/img/images.zip?h=${encodeURIComponent(currentHash)}`
+        : '/img/images.zip';
+      const res = await fetch(zipUrl, { headers, cache: 'default' });
       if (!res.ok && res.status !== 206) {
         throw new Error(`image bundle download failed (${res.status})`);
       }
@@ -290,7 +301,7 @@ export async function runInstall(): Promise<void> {
     // 4) Mark installed
     if (!currentHash) {
       try {
-        const imgRes = await fetch('/img/manifest.json', { cache: 'no-store' });
+        const imgRes = await fetch('/img/manifest.json', { cache: 'default' });
         currentHash = (await imgRes.json()).hash ?? '';
       } catch {}
     }

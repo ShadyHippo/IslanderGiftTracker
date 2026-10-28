@@ -125,6 +125,41 @@ not cache **JSON or `.wasm`** by default regardless of headers:
 Optional: *Tiered Cache* keeps the bundle at more edges; *Cache Reserve* (paid)
 keeps it on disk for months. Both matter mostly for the one 120 MB file.
 
+### When the origin is down
+
+A device can be perfectly online while the origin is not: the tunnel drops, the
+container restarts, the NAS reboots. Then Cloudflare answers every request,
+including the top-level navigation, with its own error page, and
+`navigator.onLine` still says "online". Three layers keep that from becoming
+Cloudflare's page instead of the app:
+
+1. **The service worker** answers navigations from the cached shell, and refuses
+   to cache anything that is not recognisably ours. Proxy error pages can arrive
+   with a *200* and `text/html`; one written under `/index.html` or an asset
+   would poison the cache long after the server was back, so responses are
+   validated before they are stored (and before they are shown).
+2. **A real reachability probe** (`/health`, 2.5 s timeout, JSON payload checked,
+   and a 200 HTML body is not "up"). Everything that gates on "should I talk to
+   the server?" reads it instead of `navigator.onLine`: the header badge, the
+   gift-log sync, and the login screen (which offers *Try again* instead of
+   spinning forever). Probes run on boot, on reconnect, on tab focus, and with
+   backoff (4 s → 60 s) while unreachable. When the server comes back, unsynced
+   edits upload automatically.
+3. **The edge**, optionally, so even a device with an evicted cache gets the
+   shell instead of an error page:
+   - *Caching → Cache Rules* → a rule matching `http.request.uri.path in {"/"
+     "/index.html"}` with a short Edge TTL (say 1 hour) and **Serve stale**
+     enabled. Cloudflare honors `stale-if-error`, so an unreachable origin
+     returns the last shell it has instead of the 502 page. Trade-off: deploys
+     appear at the edge up to that TTL later. `sw.js` itself is still
+     revalidated on every load, so a device with a warm cache updates normally.
+   - Or *Caching → Configuration → **Always Online***, which does the same thing
+     automatically for cached pages, at the cost of also serving stale HTML on
+     origin errors you would rather see.
+
+`/db/*`, `/img/*` and `/assets/*` are already immutable at the edge, so a warm
+edge plus a warm service worker covers the whole app.
+
 ### Google mode
 
 Set these instead of `ACNH_INIT_USERS`:
@@ -195,6 +230,7 @@ make app-up          # full app in docker (dev compose)
 make app-down        # stop
 make smoke           # curl-level end-to-end checks
 make e2e             # Playwright browser smoke test (needs app running)
+make e2e-offline     # offline gates: server down + local-save guarantees (needs client-build)
 make createuser USER=alice PASS=secret123   # convenience wrapper
 ```
 
@@ -206,7 +242,7 @@ scripts/build_db.py           xlsx -> reference.db + webp image tree
 server/                       Go: auth (both modes), progress sync, static serving
 server/deploy/                Dockerfile, docker-compose examples
 client/                       Svelte 5 + TS + Vite + Tailwind + sql.js
-tests/e2e/                    Playwright UI smoke test
+tests/e2e/                    Playwright: UI smoke, origin-down, local-save guarantees
 Makefile                      build/run/test shortcuts
 ```
 

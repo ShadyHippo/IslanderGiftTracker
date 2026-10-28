@@ -2,6 +2,7 @@
 reference.db
 img/
 reference.v*.db.gz
+!tests/e2e/fixtures/reference.v*.db.gz
 cache/
 images-missed.txt
 build.log

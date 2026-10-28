@@ -93,3 +93,15 @@ e2e:
 	docker run --rm --network host -u "$$(id -u):$$(id -g)" -e PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
 		-v "$$PWD/tests/e2e:/e2e" -w /e2e mcr.microsoft.com/playwright:v1.62.1-noble \
 		sh -c "[ -d node_modules ] || npm install --no-fund --no-audit --ignore-scripts >/dev/null 2>&1; node ui-smoke.js"
+
+# Origin-down regression: the device is online but the server (or the tunnel in
+# front of it) answers with Cloudflare's error page. Also proves the gift log is
+# really written to the device (see tests/e2e/local-save.js). Self-contained:
+# it starts a stub origin plus a proxy that can be flipped into "Cloudflare 502"
+# mode, so it needs no running app, only a built client (make client-build).
+# Mounted at the repo root because the tests serve client/dist and scan the
+# client sources.
+e2e-offline:
+	docker run --rm -u "$$(id -u):$$(id -g)" -e PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
+		-v "$$PWD:/repo" -w /repo/tests/e2e mcr.microsoft.com/playwright:v1.62.1-noble \
+		sh -c "[ -d node_modules ] || npm install --no-fund --no-audit --ignore-scripts >/dev/null 2>&1; node origin-down.js && node local-save.js"

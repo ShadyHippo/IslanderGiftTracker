@@ -82,6 +82,18 @@ annoyance:
 - [ ] **G12** Deploy new build → open app online → updates cleanly.
 - [ ] **G13** Update with unsaved offline edit pending → edit survives.
 
+### I. Server down but device online (the Cloudflare case)
+
+The device has WiFi/data, the server (or the tunnel in front of it) does not.
+Covered automatically by `make e2e-offline` (origin-down + local-save); these
+steps are the real-device
+confirmation, since iOS storage behaviour is what differs.
+
+- [ ] **I1** With the app installed and warm, stop the server container → open the app from the home-screen icon. The app loads (no Cloudflare "not working" page), villagers and images are there, header shows the server-unreachable icon.
+- [ ] **I2** Mark a gift while the server is down → floppy badge goes green, cloud badge stays amber. Kill the app, reopen: the edit is still there.
+- [ ] **I3** Start the server again → within ~a minute (no interaction needed) the cloud badge turns green and the edit is on the server (check from another device/browser).
+- [ ] **I4** Stop the server → open the app in a *fresh* browser (no site data). Expect either the cached shell (if the edge cache rule from the README is set) or a plain error, never a silently half-broken app.
+
 ---
 
 ## About popup

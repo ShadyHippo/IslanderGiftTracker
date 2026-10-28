@@ -50,3 +50,30 @@ nh_house per-villager colors/photos, per-villager exact item icons). Stage
 `[2c/4]` writes house data; `[3/4]` fetches images with a disk cache under
 `cache/`. Builds are atomic (.tmp + rename). `dev-data/` (progress, users,
 ref) is runtime data — never commit.
+
+## Offline data: exactly one IndexedDB schema owner
+
+`client/src/lib/refdb.svelte.ts` owns the `acnh` IndexedDB (version constant and
+the store set) and exports `openIdb()`. **Never** call `indexedDB.open('acnh',
+<n>)` from anywhere else, and never pin a version. That is precisely how the
+gift log silently stopped persisting once: `progress.svelte.ts` opened the db at
+version 2 while the shared db had moved to 3, every write threw `VersionError`,
+the error was swallowed by a `catch`, and the floppy badge still claimed "Saved
+on this device". Offline edits lived only in memory and were lost on reload.
+
+`make e2e-offline` (needs `make client-build`) is the gate. It runs two
+self-contained Playwright tests that stand up a stub origin plus a proxy which
+can answer with Cloudflare's error page:
+
+- `tests/e2e/origin-down.js`: online device, dead server. The app boots from the
+  cached shell, works from the device, syncs automatically when the server
+  returns, and never shows or caches the proxy's page (including the nastier
+  200 + HTML variant).
+- `tests/e2e/local-save.js`: the persistence contract. Static scan for rogue
+  IndexedDB openers/pinned versions, the stores existing, a real edit landing in
+  IndexedDB as sqlite bytes, surviving a reload with the origin down, a second
+  edit updating the same record, the unsynced flag clearing only on server
+  confirmation, and a refused write never rendering as "saved".
+
+Do not weaken these to make a change pass; if the contract has to move, move the
+test with it in the same commit.

@@ -68,7 +68,8 @@ try {
     const idb = await page.evaluate(async () => {
       try {
         const db = await new Promise((res, rej) => {
-          const r = indexedDB.open('acnh', 2);
+          // No version: the app's refdb module owns the schema version.
+          const r = indexedDB.open('acnh');
           r.onsuccess = () => res(r.result);
           r.onerror = () => rej(r.error);
         });

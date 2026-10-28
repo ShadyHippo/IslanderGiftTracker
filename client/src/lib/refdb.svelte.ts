@@ -1,5 +1,6 @@
 import initSqlJs, { type Database, type SqlJsStatic } from 'sql.js';
 import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
+import { serverReachable } from './net.svelte';
 
 interface RefManifestEntry {
   version: number;
@@ -154,11 +155,18 @@ export async function loadReferenceDb(): Promise<void> {
   state.downloaded = false;
   state.error = null;
   try {
-    // Try to fetch manifest; if server is offline, fall back to cached DB
-    let manifest: RefManifest;
-    try {
-      manifest = await fetchManifest();
-    } catch {
+    // Try to fetch the manifest; if the server is unreachable (offline, or a
+    // dead origin behind Cloudflare), go straight to the cached db instead of
+    // waiting on a request that cannot succeed.
+    let manifest: RefManifest | null = null;
+    if (serverReachable()) {
+      try {
+        manifest = await fetchManifest();
+      } catch {
+        manifest = null;
+      }
+    }
+    if (!manifest) {
       const cached = await idbGet();
       if (cached && cached.bytes.byteLength > 0) {
         // Server unreachable but we have a cached DB — use it silently

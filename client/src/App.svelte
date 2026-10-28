@@ -6,6 +6,7 @@
   import { getProgressState, loadProgress, flushProgressOnUnload, saveProgress } from './lib/progress.svelte';
   import { getInstallState, checkInstall } from './lib/install.svelte';
   import { maybeAutoOpenAbout } from './lib/about.svelte';
+  import { onServerRecovered, startNetMonitor } from './lib/net.svelte';
   import Login from './lib/Login.svelte';
   import About from './lib/About.svelte';
   import SaveBadges from './lib/SaveBadges.svelte';
@@ -70,14 +71,29 @@
     void checkInstall();
     // The first-visit About modal must never cover a public legal page.
     if (!isPublicPage) maybeAutoOpenAbout();
+    // Server reachability monitor: probes /health on boot, when the link comes
+    // back, when the tab is shown again, and with backoff while the origin is
+    // unreachable. Everything that gates on "should I talk to the server?" reads
+    // this instead of navigator.onLine, which stays true when the origin is down
+    // behind Cloudflare and every request returns a proxy error page.
+    const stopNetMonitor = startNetMonitor();
+    // Unsynced edits: flush the moment the server is confirmed reachable again.
+    const offRecovered = onServerRecovered(() => {
+      if (progress.dirty && !progress.saving) void saveProgress();
+    });
     // Version poll: detect missed iOS SW updates. Runs after paint so it
     // never delays first render. If a new deploy is found, the waiting SW
     // activates and the controllerchange listener in main.ts reloads once.
+    // The body must look like a commit hash: an HTML error page from the proxy
+    // in front of a dead origin is not a new deploy, and must never trigger a
+    // reload.
     if (navigator.onLine) {
       fetch('/version.txt', { cache: 'no-store' })
-        .then((r) => r.ok ? r.text() : null)
+        .then((r) => (r.ok ? r.text() : null))
         .then((serverHash) => {
-          if (serverHash && serverHash.trim() !== BUILD_HASH) {
+          const hash = (serverHash ?? '').trim();
+          if (!/^[0-9a-f]{7,40}$/i.test(hash)) return;
+          if (hash !== BUILD_HASH) {
             navigator.serviceWorker?.getRegistration()?.then((reg) => {
               if (reg?.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
             });
@@ -85,6 +101,10 @@
         })
         .catch(() => {});
     }
+    return () => {
+      stopNetMonitor();
+      offRecovered();
+    };
   });
 
   // The reference db is app-level state: load it as soon as we're logged in,
@@ -108,39 +128,6 @@
     const handler = () => flushProgressOnUnload();
     window.addEventListener('pagehide', handler);
     return () => window.removeEventListener('pagehide', handler);
-  });
-
-  // Retry save when the browser comes back online
-  $effect(() => {
-    const onOnline = () => {
-      if (progress.dirty && !progress.saving) {
-        void saveProgress();
-      }
-    };
-    window.addEventListener('online', onOnline);
-    return () => window.removeEventListener('online', onOnline);
-  });
-
-  // Keep the proxy/container warm — ping /health every 4 min while the
-  // tab is visible so acnh.datahippo.top doesn't cold-start for family.
-  $effect(() => {
-    let timer: ReturnType<typeof setInterval> | null = null;
-    const ping = () => {
-      if (document.visibilityState !== 'visible') return;
-      fetch('/health', { cache: 'no-store', keepalive: true }).catch(() => {});
-    };
-    const start = () => {
-      if (timer) return;
-      ping();
-      timer = setInterval(ping, 4 * 60 * 1000);
-    };
-    const stop = () => {
-      if (timer) { clearInterval(timer); timer = null; }
-    };
-    const onVis = () => { if (document.visibilityState === 'visible') start(); else stop(); };
-    document.addEventListener('visibilitychange', onVis);
-    start();
-    return () => { document.removeEventListener('visibilitychange', onVis); stop(); };
   });
 </script>
 

@@ -1,3 +1,5 @@
+import { noteServerStatus } from './net.svelte';
+
 export interface SessionUser {
   username: string;
 }
@@ -18,8 +20,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
     });
   } catch {
+    noteServerStatus(0);
     throw new ApiError(0, 'Cannot reach server. Check your connection.');
   }
+  noteServerStatus(res.status);
   if (!res.ok) {
     let msg = `Request failed (${res.status})`;
     try {
@@ -79,8 +83,10 @@ export async function progressDownload(): Promise<ArrayBuffer> {
   try {
     res = await fetch('/api/progress', { headers: { Accept: 'application/octet-stream' } });
   } catch {
+    noteServerStatus(0);
     throw new ApiError(0, 'Cannot reach server. Check your connection.');
   }
+  noteServerStatus(res.status);
   if (!res.ok) throw new ApiError(res.status, await errorText(res));
   return await res.arrayBuffer();
 }
@@ -91,8 +97,10 @@ export async function progressUpload(bytes: Uint8Array): Promise<{ ok: string; u
   try {
     res = await fetch('/api/progress', { method: 'PUT', body: new Blob([bytes as unknown as BlobPart]) });
   } catch {
+    noteServerStatus(0);
     throw new ApiError(0, 'Cannot reach server. Check your connection.');
   }
+  noteServerStatus(res.status);
   if (!res.ok) throw new ApiError(res.status, await errorText(res));
   return (await res.json()) as { ok: string; username: string };
 }

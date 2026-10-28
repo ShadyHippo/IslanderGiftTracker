@@ -22,17 +22,93 @@ function getCache(name) {
 
 // App shell: built assets from Vite + index.html
 
+// --- Response validation -----------------------------------------------------
+// When the origin is down behind a proxy/CDN (Cloudflare's "not working" page is
+// the common one here), error pages can come back with a 2xx status and
+// `text/html`. Storing one as a shell asset, a reference db or index.html
+// poisons Cache Storage and can leave a device broken even after the server
+// returns, so nothing is written to a cache, and no navigation is answered,
+// until the bytes are recognisably ours.
+function isHtml(response) {
+  return (response.headers.get('content-type') || '').toLowerCase().includes('text/html');
+}
+
+/** This origin serves exactly one HTML document: the SPA shell. */
+async function isAppShell(response) {
+  if (!response || !response.ok || !isHtml(response)) return false;
+  try {
+    return (await response.clone().text()).includes('id="app"');
+  } catch {
+    return false;
+  }
+}
+
+/** Assets, db files and manifests are never HTML. */
+function isStorable(response) {
+  return !!response && response.ok && !isHtml(response);
+}
+
+function shellResponse(body) {
+  return new Response(body, {
+    status: 200,
+    statusText: 'OK',
+    headers: { 'Content-Type': 'text/html; charset=utf-8' },
+  });
+}
+
+/**
+ * Last resort when this device has no cached shell AND the server can't be
+ * reached (first visit, or the browser evicted our storage). Hand-written so it
+ * needs no network, and it says what actually happened instead of a proxy's
+ * error page.
+ */
+function offlinePage() {
+  const html = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ACNH Gift Tracker</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: #f0fdf4; color: #14532d; }
+  main { max-width: 22rem; text-align: center; }
+  h1 { font-size: 1.25rem; margin: 0 0 0.75rem; }
+  p { margin: 0 0 1.25rem; line-height: 1.5; font-size: 0.95rem; }
+  a { display: inline-block; padding: 0.55rem 1.1rem; border-radius: 0.5rem; background: #15803d;
+    color: #fff; font-weight: 600; text-decoration: none; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #000; color: #dcfce7; }
+    a { background: #166534; }
+  }
+</style></head>
+<body><main>
+  <h1>Can&rsquo;t reach the server</h1>
+  <p>This device doesn&rsquo;t have a copy of the app saved yet, and the server isn&rsquo;t
+  answering. Your gift log on this device is untouched.</p>
+  <a href="./">Try again</a>
+</main></body></html>`;
+  return new Response(html, {
+    status: 503,
+    statusText: 'Service Unavailable',
+    headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
+  });
+}
+
+/** Fetch one shell URL and store it only if the response really is ours. */
+async function precacheShellFile(cache, url) {
+  const response = await fetch(new Request(url, { cache: 'reload' }));
+  const isDocument = url === '/' || url === '/index.html';
+  const valid = isDocument ? await isAppShell(response) : isStorable(response);
+  if (valid) await cache.put(url, response);
+}
+
 // Install: cache app shell. Each file individually — one bad URL must not
 // fail the whole install. cache:'reload' bypasses the HTTP cache so we store
 // real bytes.
 self.addEventListener('install', (event) => {
   event.waitUntil(
     getCache(SHELL_CACHE).then((cache) =>
-      Promise.all(
-        SHELL_ASSETS.map((url) =>
-          cache.add(new Request(url, { cache: 'reload' })).catch(() => {})
-        )
-      )
+      Promise.all(SHELL_ASSETS.map((url) => precacheShellFile(cache, url).catch(() => {})))
     )
   );
   self.skipWaiting();
@@ -130,33 +206,38 @@ self.addEventListener('fetch', (event) => {
 async function navigateFetch(event) {
   const { request } = event;
   const cache = await getCache(SHELL_CACHE);
-  let response = await cache.match(request);
-  if (!response) response = await cache.match('/index.html');
-  if (response) {
-    const body = await response.clone().arrayBuffer();
-    return new Response(body, {
-      status: 200,
-      statusText: 'OK',
-      headers: { 'Content-Type': 'text/html; charset=utf-8' },
-    });
-  }
+  // Always prefer the cached shell: it IS the app, it paints instantly, and it
+  // is the only thing that works with no server at all. Deep links
+  // (/villager/ace) fall back to /index.html so client-side routing handles
+  // them. This is also what keeps a download/lock/dead-origin reload inside the
+  // app instead of bouncing to whatever page the network hands back.
+  let cached = await cache.match(request);
+  if (!cached) cached = await cache.match('/index.html');
+  if (cached) return shellResponse(await cached.arrayBuffer());
+
+  // No cached shell (first visit, or the browser evicted our storage): this
+  // navigation genuinely needs the network.
   // Prefer the preloaded response (races SW boot + network in parallel).
-  // Falls back to direct fetch when preload is unavailable or offline.
-  let fresh;
+  let fresh = null;
   try {
     fresh = await event.preloadResponse;
-  } catch { /* preload unsupported or failed */ }
-  if (!fresh) {
-    try { fresh = await fetch(request); } catch { /* offline */ }
+  } catch {
+    /* preload unsupported or failed */
   }
-  if (fresh?.ok) {
-    if (fresh.url === request.url || request.url.endsWith('/')) {
-      await cache.put(request, fresh.clone());
+  if (!(await isAppShell(fresh))) {
+    try {
+      fresh = await fetch(request);
+    } catch {
+      /* offline */
     }
+  }
+  if (await isAppShell(fresh)) {
     await cache.put('/index.html', fresh.clone());
     return fresh;
   }
-  return new Response('Offline', { status: 503 });
+  // The network answered with something that is not our app (a proxy error
+  // page). Never cache it, never show it.
+  return offlinePage();
 }
 
 // cache-first for content-addressed URLs: a hit issues no network request at
@@ -168,7 +249,9 @@ async function cacheFirst(request, cacheName) {
   if (cached) return cached;
   try {
     const response = await fetch(request);
-    if (response.ok) {
+    // Never store a proxy error page under a content-addressed URL: the URL
+    // would keep resolving to it long after the server is back.
+    if (isStorable(response)) {
       await cache.put(request, response.clone());
       await pruneOtherVersions(cache, request.url);
     }
@@ -198,11 +281,16 @@ async function pruneOtherVersions(cache, keepUrl) {
 async function netFirstWriteCache(request, cacheName) {
   try {
     const response = await fetch(request);
-    if (response.ok) {
+    // Assets/db files are never HTML. A text/html body here is a proxy error
+    // page, not our content, and caching it would poison the next boot.
+    if (isStorable(response)) {
       const cache = await getCache(cacheName);
       cache.put(request, response.clone());
+      return response;
     }
-    return response;
+    const cache = await getCache(cacheName);
+    const cached = await cache.match(request);
+    return cached || new Response('Offline', { status: 503 });
   } catch {
     // Offline: try the specific cache directly (no caches.match scan).
     const cache = await getCache(cacheName);

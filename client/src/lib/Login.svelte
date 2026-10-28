@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { login } from '../lib/session.svelte';
   import { authConfig, type AuthConfig } from '../lib/api';
+  import { getNet, probeServer } from '../lib/net.svelte';
   import { getInstallState, runInstall } from '../lib/install.svelte';
   import { openAbout } from './about.svelte';
   import ThemeToggle from './ThemeToggle.svelte';
@@ -12,6 +13,12 @@
   let password = $state('');
   let error = $state<string | null>(null);
   let submitting = $state(false);
+
+  // Server reachability: a login form is useless while the origin is down, and
+  // an endless "getting your island ready" spinner in that state reads as a
+  // broken app. When the probe says the server is gone, say so and offer a retry.
+  const net = getNet();
+  let retrying = $state(false);
 
   // Which door the server exposes. Unknown until /api/auth/config answers —
   // we NEVER render a guessed door (wrong-form flash), and we cache the answer
@@ -33,6 +40,19 @@
   const isSecure =
     typeof location !== 'undefined' &&
     (location.protocol === 'https:' || location.hostname === 'localhost');
+
+  // Neither the config round-trip nor a login attempt can succeed right now.
+  const unreachable = $derived(cfg === null && (!net.online || net.server === 'down'));
+
+  async function retry() {
+    retrying = true;
+    try {
+      await probeServer();
+      await loadConfig();
+    } finally {
+      retrying = false;
+    }
+  }
 
   // OAuth failures come back as /?login_error=... after the redirect dance.
   const oauthError =
@@ -89,12 +109,32 @@
     {/if}
 
     {#if cfg === null}
-      <!-- Same gentle spinner as the boot screen: nothing flashes, nothing is
-           assumed while the config round-trip is in flight. -->
-      <div class="flex flex-col items-center justify-center gap-3 py-10" role="status" aria-live="polite">
-        <span class="h-10 w-10 animate-spin rounded-full border-4 border-green-200 border-t-green-700 dark:border-green-700 dark:border-t-green-400"></span>
-        <p class="text-sm font-medium text-green-700 dark:text-green-300">Getting your island ready…</p>
-      </div>
+      {#if unreachable}
+        <!-- The origin is down (or the device is offline): the form cannot
+             work, so don't spin forever. Say what's wrong and offer a retry. -->
+        <div class="rounded-lg bg-amber-50 px-3 py-3 text-sm text-amber-900 dark:bg-amber-950/50 dark:text-amber-200" role="status">
+          <p class="mb-2 font-medium">Can&rsquo;t reach the server right now.</p>
+          <p class="mb-3 leading-relaxed">
+            Signing in needs the server. A visitor who has already signed in on this
+            device keeps their gift log and can use it offline.
+          </p>
+          <button
+            type="button"
+            onclick={retry}
+            disabled={retrying}
+            class="rounded-lg border border-amber-400 bg-white px-3 py-1.5 text-sm font-medium text-amber-900 disabled:opacity-60 dark:border-amber-700 dark:bg-transparent dark:text-amber-200"
+          >
+            {retrying ? 'Checking…' : 'Try again'}
+          </button>
+        </div>
+      {:else}
+        <!-- Same gentle spinner as the boot screen: nothing flashes, nothing is
+             assumed while the config round-trip is in flight. -->
+        <div class="flex flex-col items-center justify-center gap-3 py-10" role="status" aria-live="polite">
+          <span class="h-10 w-10 animate-spin rounded-full border-4 border-green-200 border-t-green-700 dark:border-green-700 dark:border-t-green-400"></span>
+          <p class="text-sm font-medium text-green-700 dark:text-green-300">Getting your island ready…</p>
+        </div>
+      {/if}
     {:else if cfg.mode === 'google'}
       <a
         href="/api/auth/google/start"

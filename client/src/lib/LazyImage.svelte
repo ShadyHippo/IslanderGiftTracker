@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { acquireImage, releaseImage, fetchStoreAcquire } from './imagedb';
+  import { serverReachable } from './net.svelte';
 
   // Lazy image backed by IndexedDB. Renders a placeholder until the image is
   // near the viewport, then resolves bytes from IDB (offline) or the network
@@ -43,7 +44,9 @@
       return;
     }
     // 2) Online miss — fetch, cache into IDB for next time, show now.
-    if (navigator.onLine) {
+    //    Gated on real reachability, not navigator.onLine: with the origin down
+    //    behind a proxy every image would otherwise fire a doomed request.
+    if (serverReachable()) {
       const fetched = await fetchStoreAcquire(path);
       if (fetched) url = fetched;
     }

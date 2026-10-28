@@ -9,6 +9,7 @@
  * swallowed on purpose: the reload that follows re-fetches whatever survived.
  */
 import { clearImages } from './imagedb';
+import { openIdb } from './refdb.svelte';
 
 export async function purgeOfflineCaches(): Promise<void> {
   if ('caches' in window) {
@@ -23,11 +24,10 @@ export async function purgeOfflineCaches(): Promise<void> {
   // on next load.
   await clearImages();
   try {
-    const idb: IDBDatabase = await new Promise((res, rej) => {
-      const req = indexedDB.open('acnh', 3);
-      req.onsuccess = () => res(req.result);
-      req.onerror = () => rej(req.error);
-    });
+    // Same opener as the rest of the app: the schema version lives in
+    // refdb.svelte.ts, and a hardcoded version here silently breaks once that
+    // one moves ahead.
+    const idb: IDBDatabase = await openIdb();
     await new Promise<void>((res) => {
       const tx = idb.transaction('imgcache', 'readwrite');
       tx.objectStore('imgcache').clear();

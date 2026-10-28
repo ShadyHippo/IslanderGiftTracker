@@ -1,0 +1,56 @@
+# Host-specific settings for the acnh stack — this box only.
+#
+# NOT tracked (see .gitignore). That is the whole point: `docker compose` reads
+# it automatically, the deploy script's `git pull` never has to stash it, and
+# credentials never reach GitHub. The tracked docker-compose.yml stays identical
+# to upstream, so pulls are always fast-forwards.
+#
+# ${...} values come from ./.env (also gitignored). Create it first:
+#
+#   cat > .env <<'EOF'
+#   GOOGLE_CLIENT_ID=656836493470-xxxxxxxx.apps.googleusercontent.com
+#   GOOGLE_CLIENT_SECRET=GOCSPX-xxxxxxxx
+#   EOF
+#   chmod 600 .env
+
+services:
+  acnh:
+    environment:
+      # Google-only login. In this mode no password route is registered at all,
+      # so ACNH_INIT_USERS / -set-password do nothing.
+      AUTH_MODE: "google"
+      # `:?` makes Compose refuse to start (or even build) when .env is missing,
+      # instead of booting an instance nobody can sign in to.
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?set GOOGLE_CLIENT_ID in .env}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:?set GOOGLE_CLIENT_SECRET in .env}
+      # Pin the callback rather than deriving it from the request's Host /
+      # X-Forwarded-Host header. Must match the authorized redirect URI in the
+      # Google console exactly (scheme, host, path).
+      GOOGLE_REDIRECT_URL: "https://acnh.datahippo.top/api/auth/google/callback"
+      # Must stay true behind Cloudflare/SWAG: it marks the session cookie
+      # Secure and emits HSTS.
+      SECURE_COOKIES: "true"
+
+    # Replaces the base file's ./data:/data — Compose merges volumes by their
+    # container path, so the entry with the same target wins. Holds users.db
+    # and progress/<user>.db.
+    volumes:
+      - /mnt/user/ac_nh:/data
+
+    # SWAG proxies to http://acnh:8080 over this network. The base file's
+    # published port is 127.0.0.1:2109:8080 (loopback only), which is just a
+    # debug convenience and is not used by the proxy.
+    #
+    # Do NOT add a `ports:` entry here: Compose keys ports by {ip, target,
+    # published, protocol}, so "2109:8080" would be appended next to the
+    # loopback mapping and the container would fail to bind 2109 twice. If you
+    # really want it on the LAN, replace the list wholesale (Compose >= 2.24):
+    #
+    #   ports: !override
+    #     - "2109:8080"
+    networks:
+      - proxynet
+
+networks:
+  proxynet:
+    external: true

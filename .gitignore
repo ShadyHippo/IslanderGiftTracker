@@ -24,6 +24,12 @@ client/.pnpm-store/
 tests/e2e/node_modules/
 tests/e2e/smoke.png
 
+# --- Host-local compose override: credentials, host paths, proxy network.
+# The tracked docker-compose.yml stays identical to upstream, so the deploy
+# script's `git pull` is always a fast-forward and never stashes secrets.
+docker-compose.override.yml
+compose.override.yaml
+
 # --- Misc ---
 __pycache__/
 *.pyc

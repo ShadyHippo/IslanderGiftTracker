@@ -35,6 +35,13 @@ files needed at runtime. The container serves HTTP on port 8080, published to
 origin is not reachable from the LAN or the internet behind your proxy's back.
 There are no default accounts: create one explicitly (see below).
 
+Host-specific settings — domain, Google credentials, bind mounts, the
+reverse-proxy network — belong in a `docker-compose.override.yml` next to
+`docker-compose.yml`; start from `docker-compose.override.yml.example`. Compose
+loads the override automatically, and both it and `.env` are gitignored, so
+`git pull` on the server is always a fast-forward and never has to stash a
+secret.
+
 ## Hosting & authentication
 
 One container does everything: Go API + static PWA + reference data. All state

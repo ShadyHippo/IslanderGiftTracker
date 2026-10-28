@@ -198,11 +198,6 @@ export function noteServerStatus(status: number): void {
   if (status > 0 && status < 500) apply('up', true);
 }
 
-/** True when a probe succeeded this recently (a new one can wait). */
-export function probedRecently(withinMs = PROBE_DEBOUNCE_MS): boolean {
-  return net.lastOkAt !== null && Date.now() - net.lastOkAt < withinMs;
-}
-
 /**
  * Start the monitor: boot probe, listen for link changes and tab returns, and
  * keep the backoff/keepalive timer running. Returns a stop function.

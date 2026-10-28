@@ -265,8 +265,8 @@ export async function loadProgress(): Promise<void> {
     state.version++;
     state.dirty = pushLocal;
     state.status = 'ready';
-    // Unsynced local edits: push them to the server now (no-op while offline;
-    // the 'online'/server-recovered listeners and the next edit retry later).
+    // Unsynced local edits: push them to the server now (no-op while the server
+    // is unreachable; the retry ladder and the next edit take over from there).
     if (pushLocal) void saveProgress();
   } catch (e) {
     state.status = 'error';

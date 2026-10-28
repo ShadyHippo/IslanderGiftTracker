@@ -25,7 +25,7 @@ const RETRY_MIN_MS = 4_000;
 const RETRY_MAX_MS = 60_000;
 const KEEPALIVE_MS = 4 * 60_000;
 /** Don't re-probe more often than this (visibility flapping, double events). */
-const PROBE_DEBOUNCE_MS = 10_000;
+const PROBE_DEBOUNCE_MS = 2_000;
 
 const net = $state({
   /** The device has a network link (navigator.onLine). */
@@ -43,25 +43,34 @@ export function getNet() {
 
 /**
  * True when a server round-trip is worth attempting. 'unknown' counts as
- * reachable so a cold boot never waits on the probe before rendering. The
- * request itself will correct the state if the server is actually gone.
+ * reachable so a cold boot never waits on the probe before rendering, and the
+ * request itself corrects the state if the server is gone.
+ *
+ * Deliberately NOT gated on `navigator.onLine`: that flag goes stale in both
+ * directions (phones miss the 'online' event, and some browsers report no link
+ * while the network is fine). Gating sync on it stranded unsynced edits, because
+ * nothing was ever attempted that could correct the state. The probe result is
+ * the authority; a failed attempt corrects it the other way.
  */
 export function serverReachable(): boolean {
-  return net.online && net.server !== 'down';
+  return net.server !== 'down';
 }
 
-/** Every callback registered here runs when the server comes back. */
-const recovered: Array<() => void> = [];
+/** Callbacks that run every time the server is confirmed reachable. */
+const serverUp: Array<() => void> = [];
 
 /**
- * Run `cb` when the server goes from unreachable to reachable. Used to flush
- * unsynced edits. Returns an unsubscribe function.
+ * Run `cb` whenever the server is confirmed reachable: on every successful probe
+ * or API round-trip, not just on an unreachable→reachable edge. Edge-only
+ * notification loses updates in the common case where the app never observed an
+ * outage in the first place (device asleep, link down, nothing attempted).
+ * Returns an unsubscribe function.
  */
-export function onServerRecovered(cb: () => void): () => void {
-  recovered.push(cb);
+export function onServerUp(cb: () => void): () => void {
+  serverUp.push(cb);
   return () => {
-    const i = recovered.indexOf(cb);
-    if (i >= 0) recovered.splice(i, 1);
+    const i = serverUp.indexOf(cb);
+    if (i >= 0) serverUp.splice(i, 1);
   };
 }
 
@@ -94,19 +103,22 @@ function schedule(): void {
   }, delay);
 }
 
-function apply(next: ServerState): void {
-  const prev = net.server;
+function apply(next: ServerState, notify = false): void {
   net.server = next;
   if (next === 'up') {
     net.lastOkAt = Date.now();
+    // A round-trip just succeeded, so the device really is online. Corrects a
+    // stale navigator.onLine / missed 'online' event.
+    net.online = true;
     failures = 0;
   } else if (next === 'down') {
     net.lastFailAt = Date.now();
     failures++;
   }
-  // Only a genuine down→up transition triggers the resync hooks.
-  if (prev === 'down' && next === 'up') {
-    for (const cb of recovered.slice()) {
+  // Fire on every confirmation, not just on a down→up edge: an app that never
+  // observed the outage has no edge to catch, and that is the common case.
+  if (next === 'up' && notify) {
+    for (const cb of serverUp.slice()) {
       try {
         cb();
       } catch {
@@ -155,7 +167,9 @@ export async function probeServer(): Promise<boolean> {
   // current one; this result is stale.
   if (seq !== probeSeq) return ok;
   net.checking = false;
-  apply(ok ? 'up' : 'down');
+  // A successful probe notifies subscribers: this is the "server is back" signal
+  // the unsynced-edits flush hangs off.
+  apply(ok ? 'up' : 'down', ok);
   return ok;
 }
 
@@ -178,7 +192,10 @@ export function noteServerStatus(status: number): void {
     if (net.server !== 'down') apply('down');
     return;
   }
-  if (status > 0 && status < 500 && net.server !== 'up') apply('up');
+  // Any answer from the server itself proves it is reachable. Notify as well:
+  // /api can work while /health is blocked by a proxy rule, and that must still
+  // be enough to trigger a pending sync.
+  if (status > 0 && status < 500) apply('up', true);
 }
 
 /** True when a probe succeeded this recently (a new one can wait). */

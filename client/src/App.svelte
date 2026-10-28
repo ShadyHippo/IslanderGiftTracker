@@ -6,7 +6,7 @@
   import { getProgressState, loadProgress, flushProgressOnUnload, saveProgress } from './lib/progress.svelte';
   import { getInstallState, checkInstall } from './lib/install.svelte';
   import { maybeAutoOpenAbout } from './lib/about.svelte';
-  import { onServerRecovered, startNetMonitor } from './lib/net.svelte';
+  import { onServerUp, startNetMonitor } from './lib/net.svelte';
   import Login from './lib/Login.svelte';
   import About from './lib/About.svelte';
   import SaveBadges from './lib/SaveBadges.svelte';
@@ -77,9 +77,12 @@
     // this instead of navigator.onLine, which stays true when the origin is down
     // behind Cloudflare and every request returns a proxy error page.
     const stopNetMonitor = startNetMonitor();
-    // Unsynced edits: flush the moment the server is confirmed reachable again.
-    const offRecovered = onServerRecovered(() => {
-      if (progress.dirty && !progress.saving) void saveProgress();
+    // Unsynced edits: flush every time the server is confirmed reachable. Not
+    // edge-triggered on "it came back", because the app often never observes the
+    // outage (device asleep, link down, nothing attempted), and then there is no
+    // edge to catch. saveProgress is guarded, so a redundant call is free.
+    const offServerUp = onServerUp(() => {
+      if (progress.dirty) void saveProgress();
     });
     // Version poll: detect missed iOS SW updates. Runs after paint so it
     // never delays first render. If a new deploy is found, the waiting SW
@@ -103,7 +106,7 @@
     }
     return () => {
       stopNetMonitor();
-      offRecovered();
+      offServerUp();
     };
   });
 

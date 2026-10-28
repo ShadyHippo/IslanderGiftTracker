@@ -68,7 +68,11 @@ can answer with Cloudflare's error page:
 - `tests/e2e/origin-down.js`: online device, dead server. The app boots from the
   cached shell, works from the device, syncs automatically when the server
   returns, and never shows or caches the proxy's page (including the nastier
-  200 + HTML variant).
+  200 + HTML variant). Also covers the recovery edge cases that broke once:
+  device with no link then back online, app closed while offline and reopened,
+  and a browser that never fires `online`/`offline` at all (the unsaved-changes
+  health ladder has to do the work), plus the bottom-right note explaining a
+  waiting upload.
 - `tests/e2e/local-save.js`: the persistence contract. Static scan for rogue
   IndexedDB openers/pinned versions, the stores existing, a real edit landing in
   IndexedDB as sqlite bytes, surviving a reload with the origin down, a second

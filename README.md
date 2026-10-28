@@ -145,6 +145,12 @@ Cloudflare's page instead of the app:
    spinning forever). Probes run on boot, on reconnect, on tab focus, and with
    backoff (4 s → 60 s) while unreachable. When the server comes back, unsynced
    edits upload automatically.
+
+   While anything is unsaved, the client also re-checks `/health` on its own
+   ladder (5 s, 15 s, 30 s, then once a minute) and uploads the moment it
+   answers, so a pending sync never depends on the browser firing an event that
+   the device may never deliver. An amber note next to the save badges says why
+   a change is waiting, so a deferred upload does not look like a lost one.
 3. **The edge**, optionally, so even a device with an evicted cache gets the
    shell instead of an error page:
    - *Caching → Cache Rules* → a rule matching `http.request.uri.path in {"/"

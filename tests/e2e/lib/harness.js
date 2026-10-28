@@ -70,7 +70,7 @@ function startOrigin() {
   const progressSeed = fs.readFileSync(path.join(FIXTURES, 'progress.db'));
   const version = fs.readFileSync(path.join(DIST, 'version.txt'), 'utf8').trim();
 
-  const state = { progress: progressSeed, puts: 0, lastPut: null, requests: 0 };
+  const state = { progress: progressSeed, seed: progressSeed, puts: 0, lastPut: null, requests: 0 };
   const server = http.createServer((req, res) => {
     state.requests++;
     const p = new URL(req.url, 'http://origin').pathname;
@@ -189,6 +189,11 @@ export async function startStack({ mode = 'up' } = {}) {
       await fetch(`${base}/__mode/${next}`);
       proxy.state.mode = next;
     },
+    /** Put the stored gift log back to empty (each browser context signs in as
+     *  the same user, so earlier cases' uploads would otherwise leak into it). */
+    resetProgress() {
+      origin.state.progress = origin.state.seed;
+    },
     close() {
       proxy.server.close();
       origin.server.close();
@@ -281,11 +286,16 @@ export async function readSchema(page) {
 /**
  * Open every collapsed section on a villager page and tap the first "mark as
  * gifted" button. The gift cards live inside <details>, and which one is open
- * depends on what the user did before.
+ * depends on what the user did before. Clicking the summaries (rather than
+ * setting `.open`) survives Svelte re-rendering the sections underneath us.
  */
 export async function markFirstGift(page) {
   await page.waitForSelector('text=Gift ideas', { timeout: 30000 });
-  await page.evaluate(() => document.querySelectorAll('details').forEach((d) => (d.open = true)));
+  for (let guard = 0; guard < 12; guard++) {
+    const closed = page.locator('details:not([open]) > summary').first();
+    if ((await closed.count()) === 0) break;
+    await closed.click({ timeout: 2000 }).catch(() => {});
+  }
   const mark = page.locator('button[aria-label="Mark as gifted"]').first();
   await mark.waitFor({ state: 'visible', timeout: 15000 });
   await mark.click();

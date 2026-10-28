@@ -18,12 +18,25 @@ import {
   log,
   login,
   markFirstGift,
+  readProgressRecord,
   startStack,
   waitForConnection,
 } from './lib/harness.js';
 
 const LOG = log('origin-down');
 const { check, failures } = checker(LOG);
+
+/** Poll a page's stored gift-log record until `pred` holds. */
+async function waitForRecordOn(target, pred, timeout = 8000) {
+  const deadline = Date.now() + timeout;
+  let last = null;
+  while (Date.now() < deadline) {
+    last = await readProgressRecord(target);
+    if (pred(last)) return last;
+    await target.waitForTimeout(100);
+  }
+  return last;
+}
 
 /** Is our document (not a proxy page) what the service worker holds? */
 const shellCached = (page) =>
@@ -103,6 +116,10 @@ try {
     { timeout: 30000 },
   );
   check('server back: deferred edit synced automatically', true);
+  check(
+    'server back: the waiting note is gone',
+    (await page.locator('[data-sync-waiting]').count()) === 0,
+  );
   const uploaded = (stack.origin.lastPut ?? Buffer.from('')).toString('latin1');
   check('server back: upload reached the server', uploaded.includes('Ace'), `puts=${stack.origin.puts}`);
 
@@ -110,6 +127,147 @@ try {
   await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 });
   await page.waitForSelector(LIST, { timeout: 30000 });
   check('after recovery: app loads normally', (await page.locator('text=Ace').count()) > 0);
+
+  // --- No bars at all, then the network returns -----------------------------
+  // The realistic phone case, and the one this suite originally missed: the
+  // device reports no link, so the app never sends a request, never observes a
+  // "server down" transition, and there is nothing to edge-trigger on. Coming
+  // back online has to push those edits by itself, with no extra tap and no
+  // reload. Reported from real use: "it only synced when I saved something new".
+  //
+  // Two variants, because phones differ: (A) the offline event arrives but the
+  // matching online event is missed (common on iOS), (B) the app is closed while
+  // offline and reopened after the server is back.
+  const reconnect = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const rpage = await reconnect.newPage();
+  await rpage.addInitScript(() => {
+    localStorage.setItem('aboutDismissed', '1');
+    // Drive the link state the way the browser reports it. Going offline fires
+    // the event; coming back deliberately does not, to model a missed 'online'.
+    let up = true;
+    Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => up });
+    window.__link = (next) => {
+      up = next;
+      if (!next) window.dispatchEvent(new Event('offline'));
+    };
+  });
+  await login(rpage, stack.base);
+
+  const putsBefore = stack.origin.puts;
+  await stack.setMode('down');
+  await rpage.evaluate(() => window.__link(false));
+  await reconnect.setOffline(true);
+  await rpage.waitForTimeout(1500);
+  await rpage.click('text=Ace');
+  await markFirstGift(rpage);
+
+  const offlineRecord = await waitForRecordOn(rpage, (r) => r?.exists === true && r.unsynced === true);
+  check('no network: edit is saved on the device', offlineRecord?.unsynced === true);
+
+  // Wait past the autosave debounce (1.5s) and any in-flight attempt. Otherwise
+  // a still-pending debounce fires after the network returns and quietly does
+  // the sync itself, which is exactly how this bug hid from the first version of
+  // this test.
+  await rpage.waitForTimeout(4000);
+  const stillPending = await badges(rpage);
+  check('no network: still pending after the autosave window', stillPending.network === 'pending', JSON.stringify(stillPending));
+  check(
+    'no network: nothing reached the server',
+    stack.origin.puts === putsBefore,
+    `puts ${putsBefore} -> ${stack.origin.puts}`,
+  );
+
+  // Network and server come back. No taps, no reload, no new edit, and no
+  // 'online' event: the app has to notice and push on its own.
+  await stack.setMode('up');
+  await reconnect.setOffline(false);
+  // Link is back at the browser level, but the page was never told.
+  await rpage.evaluate(() => window.__link(true));
+  const cameBack = await rpage
+    .waitForFunction(
+      () => document.querySelector('[data-save-network]')?.getAttribute('data-save-network') === 'synced',
+      undefined,
+      { timeout: 45000 },
+    )
+    .then(() => true)
+    .catch(() => false);
+  check(
+    'no network: unsynced edits upload on their own once it returns',
+    cameBack && stack.origin.puts > putsBefore,
+    `synced=${cameBack} puts ${putsBefore} -> ${stack.origin.puts}`,
+  );
+
+  // (B) closed while offline, reopened after the server is back.
+  stack.resetProgress();
+  const putsBeforeReopen = stack.origin.puts;
+  await stack.setMode('down');
+  await rpage.evaluate(() => window.__link(false));
+  await reconnect.setOffline(true);
+  await rpage.waitForTimeout(1200);
+  await markFirstGift(rpage); // a second gift, unsynced
+  await waitForRecordOn(rpage, (r) => r?.exists === true && r.unsynced === true);
+  await rpage.close();
+
+  await stack.setMode('up');
+  await reconnect.setOffline(false);
+  const reopened = await reconnect.newPage();
+  await reopened.addInitScript(() => localStorage.setItem('aboutDismissed', '1'));
+  await reopened.goto(stack.base, { waitUntil: 'domcontentloaded', timeout: 30000 });
+  await reopened.waitForFunction(
+    () => document.querySelector('[data-save-network]')?.getAttribute('data-save-network') === 'synced',
+    undefined,
+    { timeout: 45000 },
+  );
+  check(
+    'reopened online: unsynced edits from the last session upload',
+    stack.origin.puts > putsBeforeReopen,
+    `puts ${putsBeforeReopen} -> ${stack.origin.puts}`,
+  );
+  // (C) The browser never fires online/offline at all (iOS does this). The only
+  // way the app can notice is its own health-check ladder, which runs because
+  // there are unsaved edits.
+  const silent = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const spage = await silent.newPage();
+  await spage.addInitScript(() => {
+    localStorage.setItem('aboutDismissed', '1');
+    const add = window.addEventListener.bind(window);
+    window.addEventListener = (type, fn, opts) => {
+      if (type === 'online' || type === 'offline') return; // never delivered
+      return add(type, fn, opts);
+    };
+  });
+  stack.resetProgress();
+  await login(spage, stack.base);
+
+  const putsBeforeSilent = stack.origin.puts;
+  await stack.setMode('down');
+  await silent.setOffline(true);
+  await spage.waitForTimeout(1500); // let the offline state settle, as in (A)
+  await spage.click('text=Ace');
+  await markFirstGift(spage);
+  await spage.waitForTimeout(4000); // let the attempt fail and arm the ladder
+  check(
+    'no events: edit waits on the device',
+    (await badges(spage)).network === 'pending' && stack.origin.puts === putsBeforeSilent,
+  );
+
+  await stack.setMode('up');
+  await silent.setOffline(false);
+  const recoveredSilently = await spage
+    .waitForFunction(
+      () => document.querySelector('[data-save-network]')?.getAttribute('data-save-network') === 'synced',
+      undefined,
+      { timeout: 60000 },
+    )
+    .then(() => true)
+    .catch(() => false);
+  check(
+    'no events: health-check ladder uploads without any browser event',
+    recoveredSilently && stack.origin.puts > putsBeforeSilent,
+    `synced=${recoveredSilently} puts ${putsBeforeSilent} -> ${stack.origin.puts}`,
+  );
+  await silent.close();
+  await reconnect.close();
 
   LOG(failures.length ? `FAILED: ${failures.join('; ')}` : 'DONE — all checks passed');
 } catch (e) {

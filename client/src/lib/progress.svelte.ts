@@ -1,7 +1,7 @@
 import type { Database } from 'sql.js';
 import { initSql, openIdb } from './refdb.svelte';
-import { progressDownload, progressUpload } from './api';
-import { serverReachable } from './net.svelte';
+import { ApiError, progressDownload, progressUpload } from './api';
+import { probeServer, serverReachable } from './net.svelte';
 
 /**
  * Per-user progress db: a second, tiny sqlite database holding ONLY the user's
@@ -51,6 +51,70 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let saveInFlight = false;
 
 const AUTOSAVE_MS = 1500;
+
+/**
+ * Retry ladder for unsynced edits. The flush must not depend on an external
+ * event: a phone that misses the 'online' event (or reports the link wrong) has
+ * no trigger to catch, and the edits then sat pending until the user happened to
+ * change something else. While anything is unsaved this re-arms itself, quickly
+ * at first and then once a minute.
+ *
+ * Each round is a health check first (a few hundred bytes) and the upload only
+ * if the origin answered, so a dead server does not get a whole database pushed
+ * at it every round.
+ */
+const SAVE_RETRY_MS = [5_000, 15_000, 30_000, 60_000];
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
+let retryStep = 0;
+
+function clearSaveRetry(): void {
+  if (retryTimer) {
+    clearTimeout(retryTimer);
+    retryTimer = null;
+  }
+  retryStep = 0;
+}
+
+function scheduleSaveRetry(): void {
+  if (retryTimer) return;
+  const delay = SAVE_RETRY_MS[Math.min(retryStep, SAVE_RETRY_MS.length - 1)];
+  retryStep++;
+  retryTimer = setTimeout(() => {
+    retryTimer = null;
+    // Hidden tabs stay quiet; visibilitychange flushes as soon as the app is
+    // back in front of the user.
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+      scheduleSaveRetry();
+      return;
+    }
+    void retrySave();
+  }, delay);
+}
+
+/** One rung of the ladder: is the origin back, and if so, upload. */
+async function retrySave(): Promise<void> {
+  if (!state.dirty) return;
+  if (state.saving || saveInFlight) {
+    scheduleSaveRetry();
+    return;
+  }
+  const healthy = await probeServer();
+  if (!healthy) {
+    scheduleSaveRetry();
+    return;
+  }
+  // reachable again: upload, and saveProgress re-arms the ladder if it fails.
+  await saveProgress();
+}
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    if (!state.dirty || state.saving) return;
+    clearSaveRetry();
+    void saveProgress();
+  });
+}
 
 function scheduleSave() {
   if (saveTimer) clearTimeout(saveTimer);
@@ -143,7 +207,7 @@ export function flushProgressOnUnload(): void {
   // offline to recover the IndexedDB copy. The same is true when the device is
   // online but the origin is unreachable (Cloudflare error page). The 'online'
   // and server-recovered listeners re-sync on reconnect.
-  if (!serverReachable()) return;
+  if (!navigator.onLine || !serverReachable()) return;
   try {
     fetch('/api/progress', {
       method: 'PUT',
@@ -267,6 +331,7 @@ export async function saveProgress(): Promise<void> {
     if (await idbSaveProgress(bytes.buffer, true)) state.localSaved = true;
     if (!serverReachable()) {
       state.dirty = true; // stays amber until the server is back
+      scheduleSaveRetry();
       return;
     }
     state.saving = true;
@@ -276,11 +341,12 @@ export async function saveProgress(): Promise<void> {
       await idbSaveProgress(bytes.buffer, false);
       state.dirty = false;
       state.savedAt = new Date().toLocaleTimeString();
-    } catch {
-      // Stay amber; re-sync happens on the next edit, when the browser fires
-      // 'online', or when a health probe sees the server return. No scary
-      // error text for routine offline/failed syncs. The badge IS the status.
+      clearSaveRetry();
+    } catch (e) {
+      // Stay amber and try again on the ladder. A dead session (401) is not
+      // worth retrying: the next session check sends the user to the login form.
       state.dirty = true;
+      if (!(e instanceof ApiError) || e.status !== 401) scheduleSaveRetry();
     } finally {
       state.saving = false;
     }

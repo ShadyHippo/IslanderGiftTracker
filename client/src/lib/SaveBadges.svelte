@@ -1,14 +1,28 @@
 <script lang="ts">
   import { getProgressState } from './progress.svelte';
+  import { getNet } from './net.svelte';
 
   // Two round status badges replacing the old text pill:
   //  - local:   amber floppy (writing)  → green floppy-check (on device)
   //  - network: amber cloud (pending)   → green cloud-check (server confirmed)
   // Icon AND color change together so state is readable without color.
   const progress = getProgressState();
+  const net = getNet();
 
   const network = $derived(
     progress.saving ? 'syncing' : progress.dirty ? 'pending' : 'synced',
+  );
+
+  // Why the cloud badge is amber, in words. Only shown when the reason is that
+  // the server cannot be reached and the changes are therefore waiting: an amber
+  // cloud with no explanation is what made "it stopped saving" feel like a bug
+  // rather than a deferral.
+  const waitingReason = $derived(
+    progress.dirty && (net.server === 'down' || !net.online)
+      ? net.online
+        ? 'Server unreachable. Changes are saved on this device and will sync when it is back.'
+        : 'No connection. Changes are saved on this device and will sync when it is back.'
+      : null,
   );
 </script>
 
@@ -45,7 +59,22 @@
   <span class="h-4 w-4 animate-spin rounded-full border-2 border-amber-800/30 border-t-amber-800"></span>
 {/snippet}
 
-<div class="fixed bottom-4 right-4 z-50 flex items-center gap-2" style="padding-bottom: env(safe-area-inset-bottom, 0px)">
+<div
+  class="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2"
+  style="padding-bottom: env(safe-area-inset-bottom, 0px)"
+>
+  {#if waitingReason}
+    <!-- Explains the amber cloud. One short sentence, no dialog, no tap needed:
+         the app is working, the upload is deferred, and it resumes by itself. -->
+    <span
+      data-sync-waiting
+      role="status"
+      class="max-w-[15rem] rounded-lg bg-amber-100 px-3 py-1.5 text-right text-[11px] font-medium leading-snug text-amber-900 shadow-lg dark:bg-amber-400/20 dark:text-amber-200"
+    >
+      {waitingReason}
+    </span>
+  {/if}
+  <div class="flex items-center gap-2">
   {#if progress.error}
     <span class="rounded-lg bg-red-100 px-3 py-1 text-xs font-medium text-red-700 dark:bg-red-950/60 dark:text-red-300">{progress.error}</span>
   {/if}
@@ -83,4 +112,5 @@
       {@render cloud()}
     {/if}
   </span>
+  </div>
 </div>
